@@ -269,7 +269,7 @@ func TestParseSshdConfig(t *testing.T) {
 func TestParseNameList(t *testing.T) {
 	makeList := func(s string) []byte {
 		b := make([]byte, 4+len(s))
-		binary.BigEndian.PutUint32(b[:4], uint32(len(s)))
+		binary.BigEndian.PutUint32(b[:4], uint32(len(s))) // #nosec G115 -- test input is a short literal string
 		copy(b[4:], s)
 		return b
 	}
