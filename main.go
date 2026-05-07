@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -91,13 +92,64 @@ const (
 	checkFailed           = 99   // 99
 )
 
-// rule holds the security best practices classification for a single sshd_config option
+// exitError carries an exit code alongside an error so helpers can signal
+// failure without calling os.Exit themselves (which would break in-process tests).
+type exitError struct {
+	code int
+	err  error
+}
+
+func (e *exitError) Error() string { return e.err.Error() }
+func (e *exitError) Unwrap() error { return e.err }
+
+func newExitError(code int, format string, args ...any) *exitError {
+	return &exitError{code: code, err: fmt.Errorf(format, args...)}
+}
+
+// exitOnError exits the process with the code embedded in err, or 1 if err is
+// not an *exitError. Returns immediately if err is nil.
+func exitOnError(err error) {
+	if err == nil {
+		return
+	}
+	if ee, ok := errors.AsType[*exitError](err); ok {
+		os.Exit(ee.code)
+	}
+	os.Exit(1)
+}
+
+// rule holds the security best practices classification for a single sshd_config option.
+// The recList/nrList/prList fields are derived from the recommended/notRecommended/prohibited
+// strings by build() and used at check time to avoid re-splitting on every call.
 type rule struct {
 	option         string
 	recommended    string
 	notRecommended string
 	prohibited     string
 	boolean        bool // if true, configLine emits a positive directive (not a denylist)
+	recList        []string
+	nrList         []string
+	prList         []string
+}
+
+// build pre-splits the recommended/notRecommended/prohibited strings into slices
+// so checks don't repeat the work. Intended to be chained on rule literals at package init.
+func (r rule) build() rule {
+	r.recList = splitAlgos(r.recommended)
+	r.nrList = splitAlgos(r.notRecommended)
+	r.prList = splitAlgos(r.prohibited)
+	return r
+}
+
+// splitAlgos strips spaces, splits on commas, and drops empty entries.
+func splitAlgos(s string) []string {
+	var result []string
+	for algo := range strings.SplitSeq(strings.ReplaceAll(s, " ", ""), ",") {
+		if algo != "" {
+			result = append(result, algo)
+		}
+	}
+	return result
 }
 
 func (r rule) check(c config) {
@@ -107,7 +159,7 @@ func (r rule) check(c config) {
 		cntMissing++
 		return
 	}
-	verify(r.option, enabled, r.recommended, r.notRecommended, r.prohibited)
+	verify(r, enabled)
 }
 
 // configLine returns the sshd_config directive that removes disallowed values from the default set.
@@ -117,18 +169,9 @@ func (r rule) configLine(strict bool) string {
 	if r.boolean {
 		return r.option + " " + r.recommended
 	}
-	var remove []string
-	for algo := range strings.SplitSeq(r.prohibited, ",") {
-		if algo != "" {
-			remove = append(remove, algo)
-		}
-	}
+	remove := slices.Clone(r.prList)
 	if strict {
-		for algo := range strings.SplitSeq(r.notRecommended, ",") {
-			if algo != "" {
-				remove = append(remove, algo)
-			}
-		}
+		remove = append(remove, r.nrList...)
 	}
 	if len(remove) == 0 {
 		return ""
@@ -143,13 +186,13 @@ var (
 			"ssh-ed25519,sk-ecdsa-sha2-nistp256@openssh.com,sk-ssh-ed25519@openssh.com",
 		notRecommended: "rsa-sha2-256,ecdsa-sha2-nistp256",
 		prohibited:     "ssh-rsa,ssh-dss",
-	}
+	}.build()
 	ruleCiphers = rule{
 		option:         "Ciphers",
 		recommended:    "aes256-gcm@openssh.com,chacha20-poly1305@openssh.com",
 		notRecommended: "aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr",
 		prohibited:     "aes256-cbc,aes192-cbc,aes128-cbc,3des-cbc,arcfour,arcfour128,arcfour256,blowfish-cbc,cast128-cbc",
-	}
+	}.build()
 	ruleHostbasedAcceptedAlgorithms = rule{
 		option: "HostbasedAcceptedAlgorithms",
 		recommended: "ecdsa-sha2-nistp384,ecdsa-sha2-nistp384-cert-v01@openssh.com,rsa-sha2-512," +
@@ -159,14 +202,14 @@ var (
 		notRecommended: "rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com,ecdsa-sha2-nistp256," +
 			"ecdsa-sha2-nistp256-cert-v01@openssh.com",
 		prohibited: "ssh-rsa,ssh-rsa-cert-v01@openssh.com,ssh-dss,ssh-dss-cert-v01@openssh.com",
-	}
+	}.build()
 	ruleHostbasedAuthentication = rule{
 		option:         "HostbasedAuthentication",
 		recommended:    "no",
 		notRecommended: "",
 		prohibited:     "yes",
 		boolean:        true,
-	}
+	}.build()
 	ruleHostKeyAlgorithms = rule{
 		option: "HostKeyAlgorithms",
 		recommended: "ecdsa-sha2-nistp384,ecdsa-sha2-nistp384-cert-v01@openssh.com,rsa-sha2-512," +
@@ -176,7 +219,7 @@ var (
 		notRecommended: "rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com,ecdsa-sha2-nistp256," +
 			"ecdsa-sha2-nistp256-cert-v01@openssh.com",
 		prohibited: "ssh-rsa,ssh-rsa-cert-v01@openssh.com,ssh-dss,ssh-dss-cert-v01@openssh.com",
-	}
+	}.build()
 	ruleKexAlgorithms = rule{
 		option: "KexAlgorithms",
 		recommended: "ecdh-sha2-nistp384,ecdh-sha2-nistp521,curve25519-sha256,curve25519-sha256@libssh.org," +
@@ -185,7 +228,7 @@ var (
 			"diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256",
 		prohibited: "diffie-hellman-group1-sha1,diffie-hellman-group14-sha1,diffie-hellman-group14-sha256," +
 			"diffie-hellman-group-exchange-sha1",
-	}
+	}.build()
 	ruleMACs = rule{
 		option:         "MACs",
 		recommended:    "hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com",
@@ -193,7 +236,7 @@ var (
 		prohibited: "hmac-md5,hmac-md5-96,hmac-md5-etm@openssh.com,hmac-md5-96-etm@openssh.com,hmac-sha1," +
 			"hmac-sha1-96,hmac-sha1-etm@openssh.com,hmac-sha1-96-etm@openssh.com,umac-64@openssh.com," +
 			"umac-64-etm@openssh.com",
-	}
+	}.build()
 	rulePubkeyAcceptedAlgorithms = rule{
 		option: "PubkeyAcceptedAlgorithms",
 		recommended: "ecdsa-sha2-nistp384,ecdsa-sha2-nistp384-cert-v01@openssh.com,rsa-sha2-512," +
@@ -203,7 +246,7 @@ var (
 		notRecommended: "rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com,ecdsa-sha2-nistp256," +
 			"ecdsa-sha2-nistp256-cert-v01@openssh.com",
 		prohibited: "ssh-rsa,ssh-rsa-cert-v01@openssh.com,ssh-dss,ssh-dss-cert-v01@openssh.com",
-	}
+	}.build()
 
 	// localRules is the ordered list of rules applied in local mode and used for snippet generation
 	localRules = []rule{
@@ -235,7 +278,7 @@ func getParams() params {
 	flag.StringVar(&c.config, "config", "", "full path to the output of 'sshd -T' command")
 	flag.StringVar(&c.host, "host", "", "remote host to scan via SSH handshake")
 	flag.IntVar(&c.port, "port", 22, "remote SSH port")
-	flag.StringVar(&c.generate, "generate", "", `generate sshd_config.d snippet; optional filename (default "99-ssh-hardened.conf")`)
+	flag.StringVar(&c.generate, "generate", "", `generate sshd_config.d snippet to filename (when used without value: "99-ssh-hardened.conf")`)
 	flag.BoolVar(&c.strict, "strict", false, "strict check: fail on warnings")
 	flag.BoolVar(&c.version, "version", false, "print program version and quit")
 	flag.BoolVar(&c.debug, "debug", false, "increase logging level")
@@ -281,6 +324,9 @@ func validateParams(c params) error {
 	if c.host != "" && c.config != "" {
 		return fmt.Errorf("-host cannot be combined with -config")
 	}
+	if c.port < 1 || c.port > 65535 {
+		return fmt.Errorf("-port must be between 1 and 65535, got %d", c.port)
+	}
 	return nil
 }
 
@@ -299,17 +345,18 @@ func initLog(debug bool) {
 	slog.Debug(fmt.Sprintf("log level: %v", loglevel))
 }
 
-func ensureExecutedAsRoot() {
+func ensureExecutedAsRoot() error {
 	slog.Debug("ensuring program is running as root user")
 	u, err := user.Current()
 	if err != nil {
 		slog.Error("unable to get current user", "err", err.Error())
-		os.Exit(checkUserError)
+		return newExitError(checkUserError, "unable to get current user: %w", err)
 	}
 	if u.Username != "root" {
 		slog.Error("program must be executed by root", "current_user", u.Username)
-		os.Exit(isRootError)
+		return newExitError(isRootError, "program must be executed by root (current user: %s)", u.Username)
 	}
+	return nil
 }
 
 // return parsed sshd config as a map
@@ -329,61 +376,53 @@ func parseSshdConfig(buf []byte) config {
 }
 
 // execute sshd -T, grab output and return parsed config as a map
-func getSshdConfig(path string) []byte {
+func getSshdConfig(path string) ([]byte, error) {
 	slog.Debug("getting config from 'sshd -T' command", "path", path)
 	p, err := exec.LookPath(path)
 	if err != nil {
 		slog.Error("cannot locate sshd binary", "err", err.Error())
-		os.Exit(sshdWrongPath)
+		return nil, newExitError(sshdWrongPath, "cannot locate sshd binary: %w", err)
 	}
 	slog.Debug("sshd binary", "path", p)
 	buf, err := exec.CommandContext(context.Background(), p, "-T").Output() // #nosec G204 -- sshd path is an explicit CLI input for this admin tool.
 	if err != nil {
 		slog.Error("error executing sshd -T", "path", p, "err", err.Error())
-		os.Exit(sshdExecError)
+		return nil, newExitError(sshdExecError, "error executing sshd -T at %s: %w", p, err)
 	}
-	return buf
+	return buf, nil
 }
 
 // load sshd config from file, parse it and return as a map
 // the file must contain an output from 'sshd -T' command
-func loadSshdConfig(file string) []byte {
+func loadSshdConfig(file string) ([]byte, error) {
 	slog.Debug("getting sshd config from specified file", "file", file)
 	buf, err := os.ReadFile(file) // #nosec G304 -- config file path is an explicit CLI input for offline checks.
 	if err != nil {
 		slog.Error("cannot load specified file", "err", err.Error())
-		os.Exit(fileReadError)
+		return nil, newExitError(fileReadError, "cannot load specified file: %w", err)
 	}
-	return buf
+	return buf, nil
 }
 
 // verify if enabled options match recommended, not recommended or prohibited lists
-func verify(option string, enabled string, recommended string, notRecommended string, prohibited string) {
-	slog.Info("verifying", "option", option)
-	slog.Debug("enabled values", "option", option, "values", enabled)
-	slog.Debug("recommended values", "option", option, "values", recommended)
-	slog.Debug("not recommended values", "option", option, "values", notRecommended)
-	slog.Debug("prohibited values", "option", option, "values", prohibited)
-	// remove spaces and split on comma separator
-	en := strings.Split(strings.ReplaceAll(enabled, " ", ""), ",")
-	re := strings.Split(strings.ReplaceAll(recommended, " ", ""), ",")
-	nr := strings.Split(strings.ReplaceAll(notRecommended, " ", ""), ",")
-	pr := strings.Split(strings.ReplaceAll(prohibited, " ", ""), ",")
-	for _, v := range en {
-		if v == "" {
-			continue
-		}
+func verify(r rule, enabled string) {
+	slog.Info("verifying", "option", r.option)
+	slog.Debug("enabled values", "option", r.option, "values", enabled)
+	slog.Debug("recommended values", "option", r.option, "values", r.recommended)
+	slog.Debug("not recommended values", "option", r.option, "values", r.notRecommended)
+	slog.Debug("prohibited values", "option", r.option, "values", r.prohibited)
+	for _, v := range splitAlgos(enabled) {
 		switch {
-		case slices.Contains(re, v):
-			slog.Info("found recommended setting", "option", option, "value", v)
-		case slices.Contains(nr, v):
-			slog.Warn("found not recommended setting", "option", option, "value", v)
+		case slices.Contains(r.recList, v):
+			slog.Info("found recommended setting", "option", r.option, "value", v)
+		case slices.Contains(r.nrList, v):
+			slog.Warn("found not recommended setting", "option", r.option, "value", v)
 			cntWarn++
-		case slices.Contains(pr, v):
-			slog.Error("found prohibited setting", "option", option, "value", v)
+		case slices.Contains(r.prList, v):
+			slog.Error("found prohibited setting", "option", r.option, "value", v)
 			cntErr++
 		default:
-			slog.Warn("found unknown setting", "option", option, "value", v)
+			slog.Warn("found unknown setting", "option", r.option, "value", v)
 			cntWarn++
 		}
 	}
@@ -423,7 +462,7 @@ func PubkeyAcceptedAlgorithms(c config) { rulePubkeyAcceptedAlgorithms.check(c) 
 
 // generateSnippet writes an sshd_config.d snippet that restricts each option to recommended values.
 // In strict mode only recommended values are included; otherwise not-recommended are included too.
-func generateSnippet(path string, strict bool) {
+func generateSnippet(path string, strict bool) error {
 	slog.Info("generating sshd_config.d snippet", "path", path, "strict", strict)
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "# Generated by check-ssh %s (commit: %s)\n", version, commit)
@@ -437,20 +476,21 @@ func generateSnippet(path string, strict bool) {
 	}
 	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil { // #nosec G306 -- config snippet is not a secret
 		slog.Error("cannot write snippet", "path", path, "err", err.Error())
-		os.Exit(generateError)
+		return newExitError(generateError, "cannot write snippet to %s: %w", path, err)
 	}
 	slog.Info("snippet written", "path", path)
 	if strings.HasPrefix(filepath.Clean(path), "/etc/") {
 		u, err := user.Current()
 		if err == nil && u.Username != "root" {
-			slog.Warn("snippet written as non-root; sshd will ignore it — run: sudo chown root:root " + path)
+			slog.Warn("snippet was written but is not owned by root; sshd will refuse to load it until you run: sudo chown root:root " + path)
 		}
 	}
+	return nil
 }
 
 // readSSHBanner reads lines from r until it finds the server's SSH identification string
 func readSSHBanner(r *bufio.Reader) (string, error) {
-	for lineNo := 1; lineNo <= maxSSHBannerLines; lineNo++ {
+	for range maxSSHBannerLines {
 		line, err := r.ReadSlice('\n')
 		if err == bufio.ErrBufferFull {
 			return "", fmt.Errorf("SSH banner line too long")
@@ -510,14 +550,14 @@ func parseNameList(data []byte, offset int) (string, int, error) {
 }
 
 // getRemoteConfig connects to a remote SSH server, reads its KEXINIT, and returns the server-side algorithm config
-func getRemoteConfig(host string, port int) config {
+func getRemoteConfig(host string, port int) (config, error) {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	slog.Debug("connecting to remote host", "addr", addr)
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	conn, err := dialer.DialContext(context.Background(), "tcp", addr)
 	if err != nil {
 		slog.Error("cannot connect to remote host", "addr", addr, "err", err.Error())
-		os.Exit(remoteConnError)
+		return nil, newExitError(remoteConnError, "cannot connect to remote host %s: %w", addr, err)
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
@@ -526,7 +566,7 @@ func getRemoteConfig(host string, port int) config {
 	}()
 	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		slog.Error("cannot set connection deadline", "err", err.Error())
-		os.Exit(remoteConnError)
+		return nil, newExitError(remoteConnError, "cannot set connection deadline: %w", err)
 	}
 
 	r := bufio.NewReader(conn)
@@ -534,72 +574,87 @@ func getRemoteConfig(host string, port int) config {
 	banner, err := readSSHBanner(r)
 	if err != nil {
 		slog.Error("cannot read SSH banner", "addr", addr, "err", err.Error())
-		os.Exit(remoteConnError)
+		return nil, newExitError(remoteConnError, "cannot read SSH banner from %s: %w", addr, err)
 	}
 	slog.Debug("remote SSH banner", "banner", banner)
 
 	if _, err := fmt.Fprintf(conn, "SSH-2.0-check-ssh\r\n"); err != nil {
 		slog.Error("cannot send SSH banner", "addr", addr, "err", err.Error())
-		os.Exit(remoteConnError)
+		return nil, newExitError(remoteConnError, "cannot send SSH banner to %s: %w", addr, err)
 	}
 
 	payload, err := readSSHPacket(r)
 	if err != nil {
 		slog.Error("cannot read KEXINIT packet", "addr", addr, "err", err.Error())
-		os.Exit(remoteConnError)
+		return nil, newExitError(remoteConnError, "cannot read KEXINIT packet from %s: %w", addr, err)
 	}
 
 	if err := validateKEXINITPayload(payload); err != nil {
 		slog.Error("unexpected SSH packet payload", "err", err.Error())
-		os.Exit(remoteConnError)
+		return nil, newExitError(remoteConnError, "unexpected SSH packet payload: %w", err)
 	}
 
 	// skip message type (1 byte) + cookie (16 bytes)
 	offset := 17
-	fail := func(field string, err error) {
-		slog.Error("cannot parse KEXINIT field", "field", field, "err", err.Error())
-		os.Exit(remoteConnError)
+	parseField := func(field string) (string, error) {
+		v, off, err := parseNameList(payload, offset)
+		if err != nil {
+			slog.Error("cannot parse KEXINIT field", "field", field, "err", err.Error())
+			return "", newExitError(remoteConnError, "cannot parse KEXINIT field %s: %w", field, err)
+		}
+		offset = off
+		return v, nil
 	}
 
-	var kexAlgos, hostKeyAlgos, encSC, macSC string
-	var val string
-
-	if val, offset, err = parseNameList(payload, offset); err != nil {
-		fail("kex_algorithms", err)
+	kexAlgos, err := parseField("kex_algorithms")
+	if err != nil {
+		return nil, err
 	}
-	kexAlgos = val
-
-	if val, offset, err = parseNameList(payload, offset); err != nil {
-		fail("server_host_key_algorithms", err)
+	hostKeyAlgos, err := parseField("server_host_key_algorithms")
+	if err != nil {
+		return nil, err
 	}
-	hostKeyAlgos = val
-
-	// skip encryption_algorithms_client_to_server
-	if _, offset, err = parseNameList(payload, offset); err != nil {
-		fail("encryption_algorithms_client_to_server", err)
+	encCS, err := parseField("encryption_algorithms_client_to_server")
+	if err != nil {
+		return nil, err
 	}
-
-	if val, offset, err = parseNameList(payload, offset); err != nil {
-		fail("encryption_algorithms_server_to_client", err)
+	encSC, err := parseField("encryption_algorithms_server_to_client")
+	if err != nil {
+		return nil, err
 	}
-	encSC = val
-
-	// skip mac_algorithms_client_to_server
-	if _, offset, err = parseNameList(payload, offset); err != nil {
-		fail("mac_algorithms_client_to_server", err)
+	macCS, err := parseField("mac_algorithms_client_to_server")
+	if err != nil {
+		return nil, err
 	}
-
-	if val, _, err = parseNameList(payload, offset); err != nil {
-		fail("mac_algorithms_server_to_client", err)
+	macSC, err := parseField("mac_algorithms_server_to_client")
+	if err != nil {
+		return nil, err
 	}
-	macSC = val
 
 	c := make(config)
 	c["kexalgorithms"] = filterKexExtensions(kexAlgos)
 	c["hostkeyalgorithms"] = hostKeyAlgos
-	c["ciphers"] = encSC
-	c["macs"] = macSC
-	return c
+	c["ciphers"] = mergeAlgos(encCS, encSC)
+	c["macs"] = mergeAlgos(macCS, macSC)
+	return c, nil
+}
+
+// mergeAlgos returns the union of two comma-separated algorithm lists, preserving
+// the order of first appearance. Used to surface weak algorithms advertised in
+// either direction when the server's client-to-server and server-to-client lists differ.
+func mergeAlgos(a, b string) string {
+	seen := make(map[string]bool)
+	var result []string
+	for _, list := range []string{a, b} {
+		for algo := range strings.SplitSeq(list, ",") {
+			if algo == "" || seen[algo] {
+				continue
+			}
+			seen[algo] = true
+			result = append(result, algo)
+		}
+	}
+	return strings.Join(result, ",")
 }
 
 func validateKEXINITPayload(payload []byte) error {
@@ -639,24 +694,27 @@ func main() {
 	}
 
 	if p.generate != "" {
-		generateSnippet(p.generate, p.strict)
+		exitOnError(generateSnippet(p.generate, p.strict))
 		os.Exit(noError)
 	}
 
 	if p.host != "" {
-		c := getRemoteConfig(p.host, p.port)
+		c, err := getRemoteConfig(p.host, p.port)
+		exitOnError(err)
 		KexAlgorithms(c)
 		Ciphers(c)
 		MACs(c)
 		HostKeyAlgorithms(c)
 	} else {
 		var buf []byte
+		var err error
 		if p.config != "" {
-			buf = loadSshdConfig(p.config)
+			buf, err = loadSshdConfig(p.config)
 		} else {
-			ensureExecutedAsRoot()
-			buf = getSshdConfig(p.path)
+			exitOnError(ensureExecutedAsRoot())
+			buf, err = getSshdConfig(p.path)
 		}
+		exitOnError(err)
 		c := parseSshdConfig(buf)
 		CASignatureAlgorithms(c)
 		Ciphers(c)

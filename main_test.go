@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -36,38 +38,53 @@ func TestValidateParamsRejectsInvalidModes(t *testing.T) {
 	}{
 		{
 			name:    "host and config",
-			params:  params{host: "example.com", config: "sshd-T.txt"},
+			params:  params{host: "example.com", config: "sshd-T.txt", port: 22},
 			wantErr: true,
 		},
 		{
 			name:    "host and generate",
-			params:  params{host: "example.com", generate: "99-ssh-hardened.conf"},
+			params:  params{host: "example.com", generate: "99-ssh-hardened.conf", port: 22},
 			wantErr: true,
 		},
 		{
 			name:    "config and generate",
-			params:  params{config: "sshd-T.txt", generate: "99-ssh-hardened.conf"},
+			params:  params{config: "sshd-T.txt", generate: "99-ssh-hardened.conf", port: 22},
 			wantErr: true,
 		},
 		{
 			name:    "path and generate",
-			params:  params{pathSet: true, generate: "99-ssh-hardened.conf"},
+			params:  params{pathSet: true, generate: "99-ssh-hardened.conf", port: 22},
 			wantErr: true,
 		},
 		{
 			name:    "port and generate",
-			params:  params{portSet: true, generate: "99-ssh-hardened.conf"},
+			params:  params{portSet: true, generate: "99-ssh-hardened.conf", port: 22},
 			wantErr: true,
 		},
 		{
 			name:    "generate only",
-			params:  params{generate: "99-ssh-hardened.conf"},
+			params:  params{generate: "99-ssh-hardened.conf", port: 22},
 			wantErr: false,
 		},
 		{
 			name:    "host only",
-			params:  params{host: "example.com"},
+			params:  params{host: "example.com", port: 22},
 			wantErr: false,
+		},
+		{
+			name:    "port out of range low",
+			params:  params{host: "example.com", port: 0},
+			wantErr: true,
+		},
+		{
+			name:    "port out of range high",
+			params:  params{host: "example.com", port: 70000},
+			wantErr: true,
+		},
+		{
+			name:    "port negative",
+			params:  params{host: "example.com", port: -1},
+			wantErr: true,
 		},
 	}
 
@@ -132,6 +149,56 @@ func TestReadSSHPacketRejectsInvalidPadding(t *testing.T) {
 	_, err := readSSHPacket(bufio.NewReader(&packet))
 	if err == nil {
 		t.Fatal("readSSHPacket() should reject padding shorter than 4 bytes")
+	}
+}
+
+func TestLoadSshdConfigMissingFile(t *testing.T) {
+	_, err := loadSshdConfig(filepath.Join(t.TempDir(), "nonexistent"))
+	if err == nil {
+		t.Fatal("loadSshdConfig() should fail for missing file")
+	}
+	ee, ok := errors.AsType[*exitError](err)
+	if !ok || ee.code != fileReadError {
+		t.Fatalf("expected exitError with code %d, got %v", fileReadError, err)
+	}
+}
+
+func TestGetSshdConfigBadPath(t *testing.T) {
+	_, err := getSshdConfig(filepath.Join(t.TempDir(), "nonexistent-sshd"))
+	if err == nil {
+		t.Fatal("getSshdConfig() should fail for missing binary")
+	}
+	ee, ok := errors.AsType[*exitError](err)
+	if !ok || ee.code != sshdWrongPath {
+		t.Fatalf("expected exitError with code %d, got %v", sshdWrongPath, err)
+	}
+}
+
+func TestGenerateSnippet(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "snippet.conf")
+	if err := generateSnippet(path, false); err != nil {
+		t.Fatalf("generateSnippet() error = %v", err)
+	}
+	got, err := loadSshdConfig(path)
+	if err != nil {
+		t.Fatalf("loadSshdConfig() error = %v", err)
+	}
+	if !strings.Contains(string(got), "Ciphers -") {
+		t.Fatalf("snippet missing Ciphers directive:\n%s", got)
+	}
+	if !strings.Contains(string(got), "HostbasedAuthentication no") {
+		t.Fatalf("snippet missing HostbasedAuthentication directive:\n%s", got)
+	}
+}
+
+func TestGenerateSnippetUnwritable(t *testing.T) {
+	err := generateSnippet(filepath.Join(t.TempDir(), "no-such-dir", "snippet.conf"), false)
+	if err == nil {
+		t.Fatal("generateSnippet() should fail when directory does not exist")
+	}
+	ee, ok := errors.AsType[*exitError](err)
+	if !ok || ee.code != generateError {
+		t.Fatalf("expected exitError with code %d, got %v", generateError, err)
 	}
 }
 
