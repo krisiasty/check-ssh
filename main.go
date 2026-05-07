@@ -273,12 +273,12 @@ func getParams() params {
 	var c params
 	var showVersion, showHelp bool
 
-	injectGenerateDefault("99-ssh-hardened.conf")
+	injectGenerateDefault("00-ssh-hardened.conf")
 	flag.StringVar(&c.path, "path", "/usr/sbin/sshd", "full path to sshd binary")
 	flag.StringVar(&c.config, "config", "", "full path to the output of 'sshd -T' command")
 	flag.StringVar(&c.host, "host", "", "remote host to scan via SSH handshake")
 	flag.IntVar(&c.port, "port", 22, "remote SSH port")
-	flag.StringVar(&c.generate, "generate", "", `generate sshd_config.d snippet to filename (when used without value: "99-ssh-hardened.conf")`)
+	flag.StringVar(&c.generate, "generate", "", `generate sshd_config.d snippet to filename (when used without value: "00-ssh-hardened.conf")`)
 	flag.BoolVar(&c.strict, "strict", false, "strict check: fail on warnings")
 	flag.BoolVar(&showVersion, "version", false, "print program version and quit")
 	flag.BoolVar(&c.debug, "debug", false, "increase logging level")

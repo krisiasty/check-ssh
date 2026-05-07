@@ -35,7 +35,7 @@ check-ssh -help
 | `-config <file>`     | —                      | Path to a saved `sshd -T` output; skips running sshd locally.                                                                        |
 | `-host <host>`       | —                      | Hostname or IP of a remote SSH server to scan.                                                                                       |
 | `-port <port>`       | `22`                   | TCP port for remote scanning.                                                                                                        |
-| `-generate [<file>]` | `99-ssh-hardened.conf` | Write an `sshd_config.d` drop-in snippet that removes disallowed algorithms. Must be used standalone. |
+| `-generate [<file>]` | `00-ssh-hardened.conf` | Write an `sshd_config.d` drop-in snippet that removes disallowed algorithms. Must be used standalone. |
 | `-strict`            | false                  | Treat *not-recommended* findings as failures (exit 99). Also removes not-recommended algorithms from the generated snippet.          |
 | `-debug`             | false                  | Increase log verbosity.                                                                                                              |
 | `-version`           | —                      | Print version, commit, and build date, then exit.                                                                                    |
@@ -284,14 +284,14 @@ For a complete audit use local mode (`sudo check-ssh`) or capture `sshd -T` outp
 ### Generate
 
 ```bash
-# Default filename (99-ssh-hardened.conf), written to the current directory:
+# Default filename (00-ssh-hardened.conf), written to the current directory:
 check-ssh -generate
 
 # Custom path, written directly to the system drop-in directory:
-sudo check-ssh -generate /etc/ssh/sshd_config.d/99-ssh-hardened.conf
+sudo check-ssh -generate /etc/ssh/sshd_config.d/00-ssh-hardened.conf
 
 # Strict variant (removes not-recommended algorithms too):
-sudo check-ssh -generate /etc/ssh/sshd_config.d/99-ssh-hardened.conf -strict
+sudo check-ssh -generate /etc/ssh/sshd_config.d/00-ssh-hardened.conf -strict
 ```
 
 ### Install
@@ -305,9 +305,9 @@ sudo check-ssh -generate /etc/ssh/sshd_config.d/99-ssh-hardened.conf -strict
 2. **Place the file in the drop-in directory and set ownership:**
 
    ```bash
-   sudo cp 99-ssh-hardened.conf /etc/ssh/sshd_config.d/
-   sudo chown root:root /etc/ssh/sshd_config.d/99-ssh-hardened.conf
-   sudo chmod 644 /etc/ssh/sshd_config.d/99-ssh-hardened.conf
+   sudo cp 00-ssh-hardened.conf /etc/ssh/sshd_config.d/
+   sudo chown root:root /etc/ssh/sshd_config.d/00-ssh-hardened.conf
+   sudo chmod 644 /etc/ssh/sshd_config.d/00-ssh-hardened.conf
    ```
 
    > sshd silently ignores drop-in files not owned by root.

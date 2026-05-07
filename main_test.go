@@ -39,27 +39,27 @@ func TestValidateParamsRejectsInvalidModes(t *testing.T) {
 		},
 		{
 			name:    "host and generate",
-			params:  params{host: "example.com", generate: "99-ssh-hardened.conf"},
+			params:  params{host: "example.com", generate: "00-ssh-hardened.conf"},
 			wantErr: true,
 		},
 		{
 			name:    "config and generate",
-			params:  params{config: "sshd-T.txt", generate: "99-ssh-hardened.conf"},
+			params:  params{config: "sshd-T.txt", generate: "00-ssh-hardened.conf"},
 			wantErr: true,
 		},
 		{
 			name:    "path and generate",
-			params:  params{pathSet: true, generate: "99-ssh-hardened.conf"},
+			params:  params{pathSet: true, generate: "00-ssh-hardened.conf"},
 			wantErr: true,
 		},
 		{
 			name:    "port and generate",
-			params:  params{portSet: true, generate: "99-ssh-hardened.conf"},
+			params:  params{portSet: true, generate: "00-ssh-hardened.conf"},
 			wantErr: true,
 		},
 		{
 			name:    "generate only",
-			params:  params{generate: "99-ssh-hardened.conf"},
+			params:  params{generate: "00-ssh-hardened.conf"},
 			wantErr: false,
 		},
 		{
