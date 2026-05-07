@@ -4,7 +4,7 @@
 
 ## How it works
 
-The tool operates in three modes:
+The tool operates in four modes:
 
 **Local mode** (default) — runs `sshd -T` on the local machine to obtain the fully-resolved, active configuration and checks all supported options. Requires root because `sshd -T` needs access to host key files.
 
@@ -12,15 +12,17 @@ The tool operates in three modes:
 
 **Remote mode** (`-host`) — connects to a remote SSH server, reads the unencrypted SSH handshake (`KEXINIT` message), and checks the subset of options advertised there. No credentials or authentication are required. See [Limitations of remote mode](#limitations-of-remote-mode) below.
 
-Regardless of mode, every enabled value is classified as **recommended**, **not recommended**, **prohibited**, or **unknown** (treated as a warning). The exit code reflects the result: `0` on pass, `99` on failure.
+**Generation mode** (`-generate`) — writes an `sshd_config.d` drop-in snippet that removes disallowed algorithms from sshd's defaults. This is a standalone mode and cannot be combined with local, config-file, or remote scanning.
+
+In scan modes, every enabled value is classified as **recommended**, **not recommended**, **prohibited**, or **unknown** (treated as a warning). Exit codes are listed below.
 
 ## Usage
 
 ```text
-check-ssh [-path <sshd>] [-strict] [-generate [<file>]] [-debug]
+check-ssh [-path <sshd>] [-strict] [-debug]
 check-ssh -config <file> [-strict] [-debug]
 check-ssh -host <host> [-port <port>] [-strict] [-debug]
-check-ssh -generate [<file>] [-strict]
+check-ssh -generate [<file>] [-strict] [-debug]
 check-ssh -version
 check-ssh -help
 ```
@@ -33,7 +35,7 @@ check-ssh -help
 | `-config <file>`     | —                      | Path to a saved `sshd -T` output; skips running sshd locally.                                                                        |
 | `-host <host>`       | —                      | Hostname or IP of a remote SSH server to scan.                                                                                       |
 | `-port <port>`       | `22`                   | TCP port for remote scanning.                                                                                                        |
-| `-generate [<file>]` | `99-ssh-hardened.conf` | Write an `sshd_config.d` drop-in snippet that removes disallowed algorithms. Can be combined with any check mode or used standalone. |
+| `-generate [<file>]` | `99-ssh-hardened.conf` | Write an `sshd_config.d` drop-in snippet that removes disallowed algorithms. Must be used standalone. |
 | `-strict`            | false                  | Treat *not-recommended* findings as failures (exit 99). Also removes not-recommended algorithms from the generated snippet.          |
 | `-debug`             | false                  | Increase log verbosity.                                                                                                              |
 | `-version`           | —                      | Print version, commit, and build date, then exit.                                                                                    |
@@ -51,6 +53,8 @@ check-ssh -help
 | `5`  | Could not read the specified config file.      |
 | `6`  | Remote connection or handshake failed.         |
 | `7`  | Could not write the generated snippet.         |
+| `8`  | Invalid argument combination.                  |
+| `9`  | Config is incomplete or missing required keys. |
 | `99` | One or more checks failed.                     |
 
 ---
@@ -266,7 +270,7 @@ Additional caveats:
 - **Only server-to-client direction is inspected** for `Ciphers` and `MACs`; client-to-server algorithms are discarded.
 - **`sshd` `Match` blocks are not reflected.** The `KEXINIT` advertisement shows the global default; per-user or per-address overrides applied after authentication are invisible.
 - **Algorithm advertisement ≠ configuration.** A server may advertise algorithms that are filtered by PAM, certificates, or other post-handshake policy.
-- **No snippet generation in remote mode.** Because the tool does not have access to the full server configuration, `-generate` cannot be combined with `-host`.
+- **No snippet generation in remote mode.** `-generate` is a standalone mode and cannot be combined with any scan mode.
 - **Network access required.** The target port (default 22) must be reachable.
 
 For a complete audit use local mode (`sudo check-ssh`) or capture `sshd -T` output on the target and transfer it for offline analysis (`check-ssh -config <file>`).
@@ -275,7 +279,7 @@ For a complete audit use local mode (`sudo check-ssh`) or capture `sshd -T` outp
 
 ## Generating and installing a configuration snippet
 
-`check-ssh -generate` produces a drop-in `sshd_config.d` file that removes all disallowed algorithms from sshd's defaults using the `-algorithm` subtraction syntax. Adding `-strict` also removes not-recommended algorithms.
+`check-ssh -generate` produces a drop-in `sshd_config.d` file that removes all disallowed algorithms from sshd's defaults using the `-algorithm` subtraction syntax. It is a standalone mode; it cannot be combined with local, config-file, or remote scanning. Adding `-strict` also removes not-recommended algorithms.
 
 ### Generate
 

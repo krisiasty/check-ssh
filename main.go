@@ -31,8 +31,9 @@ var (
 
 // global counters
 var (
-	cntWarn = 0 // total number of warnings
-	cntErr  = 0 // total number of errors
+	cntWarn    = 0 // total number of warnings
+	cntErr     = 0 // total number of errors
+	cntMissing = 0 // total number of missing required settings
 )
 
 type params struct {
@@ -45,9 +46,17 @@ type params struct {
 	version  bool
 	debug    bool
 	help     bool
+	pathSet  bool
+	portSet  bool
 }
 
 type config map[string]string
+
+const (
+	maxSSHBannerLineLen = 255
+	maxSSHBannerLines   = 50
+	maxSSHPacketLen     = 35000
+)
 
 // injectGenerateDefault inserts a default filename into os.Args when -generate is
 // present but not followed by a value, so flag.StringVar can consume it normally.
@@ -69,15 +78,17 @@ func injectGenerateDefault(def string) {
 
 // application return codes
 const (
-	noError         = iota // 0
-	checkUserError         // 1
-	isRootError            // 2
-	sshdWrongPath          // 3
-	sshdExecError          // 4
-	fileReadError          // 5
-	remoteConnError        // 6
-	generateError          // 7
-	checkFailed     = 99   // 99
+	noError               = iota // 0
+	checkUserError               // 1
+	isRootError                  // 2
+	sshdWrongPath                // 3
+	sshdExecError                // 4
+	fileReadError                // 5
+	remoteConnError              // 6
+	generateError                // 7
+	paramError                   // 8
+	incompleteConfigError        // 9
+	checkFailed           = 99   // 99
 )
 
 // rule holds the security best practices classification for a single sshd_config option
@@ -90,7 +101,13 @@ type rule struct {
 }
 
 func (r rule) check(c config) {
-	verify(r.option, c[strings.ToLower(r.option)], r.recommended, r.notRecommended, r.prohibited)
+	enabled, ok := c[strings.ToLower(r.option)]
+	if !ok || strings.TrimSpace(enabled) == "" {
+		slog.Error("missing required setting", "option", r.option)
+		cntMissing++
+		return
+	}
+	verify(r.option, enabled, r.recommended, r.notRecommended, r.prohibited)
 }
 
 // configLine returns the sshd_config directive that removes disallowed values from the default set.
@@ -221,6 +238,14 @@ func getParams() params {
 	flag.BoolVar(&c.debug, "debug", false, "increase logging level")
 	flag.BoolVar(&c.help, "help", false, "print help and exit")
 	flag.Parse()
+	flag.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "path":
+			c.pathSet = true
+		case "port":
+			c.portSet = true
+		}
+	})
 
 	if c.version {
 		fmt.Printf("%s version: %s (commit: %s, build date: %s)\n", prog, version, commit, date)
@@ -233,6 +258,27 @@ func getParams() params {
 	}
 
 	return c
+}
+
+func validateParams(c params) error {
+	if c.generate != "" {
+		if c.host != "" {
+			return fmt.Errorf("-generate cannot be combined with -host")
+		}
+		if c.config != "" {
+			return fmt.Errorf("-generate cannot be combined with -config")
+		}
+		if c.pathSet {
+			return fmt.Errorf("-generate cannot be combined with -path")
+		}
+		if c.portSet {
+			return fmt.Errorf("-generate cannot be combined with -port")
+		}
+	}
+	if c.host != "" && c.config != "" {
+		return fmt.Errorf("-host cannot be combined with -config")
+	}
+	return nil
 }
 
 func initLog(debug bool) {
@@ -396,16 +442,23 @@ func generateSnippet(path string, strict bool) {
 
 // readSSHBanner reads lines from r until it finds the server's SSH identification string
 func readSSHBanner(r *bufio.Reader) (string, error) {
-	for {
-		line, err := r.ReadString('\n')
+	for lineNo := 1; lineNo <= maxSSHBannerLines; lineNo++ {
+		line, err := r.ReadSlice('\n')
+		if err == bufio.ErrBufferFull {
+			return "", fmt.Errorf("SSH banner line too long")
+		}
 		if err != nil {
 			return "", fmt.Errorf("reading SSH banner: %w", err)
 		}
-		line = strings.TrimRight(line, "\r\n")
-		if strings.HasPrefix(line, "SSH-") {
-			return line, nil
+		if len(line) > maxSSHBannerLineLen {
+			return "", fmt.Errorf("SSH banner line too long")
+		}
+		text := strings.TrimRight(string(line), "\r\n")
+		if strings.HasPrefix(text, "SSH-") {
+			return text, nil
 		}
 	}
+	return "", fmt.Errorf("too many lines before SSH banner")
 }
 
 // readSSHPacket reads one unencrypted SSH binary packet and returns its payload
@@ -414,7 +467,10 @@ func readSSHPacket(r *bufio.Reader) ([]byte, error) {
 	if err := binary.Read(r, binary.BigEndian, &packetLen); err != nil {
 		return nil, fmt.Errorf("reading packet length: %w", err)
 	}
-	if packetLen > 35000 {
+	if packetLen < 5 {
+		return nil, fmt.Errorf("invalid packet length: %d", packetLen)
+	}
+	if packetLen > maxSSHPacketLen {
 		return nil, fmt.Errorf("packet too large: %d", packetLen)
 	}
 	buf := make([]byte, packetLen)
@@ -422,6 +478,9 @@ func readSSHPacket(r *bufio.Reader) ([]byte, error) {
 		return nil, fmt.Errorf("reading packet body: %w", err)
 	}
 	paddingLen := int(buf[0])
+	if paddingLen < 4 {
+		return nil, fmt.Errorf("invalid padding length %d", paddingLen)
+	}
 	end := len(buf) - paddingLen
 	if end < 1 {
 		return nil, fmt.Errorf("invalid padding length %d", paddingLen)
@@ -482,9 +541,8 @@ func getRemoteConfig(host string, port int) config {
 		os.Exit(remoteConnError)
 	}
 
-	const sshMsgKexinit = 20
-	if len(payload) < 1 || payload[0] != sshMsgKexinit {
-		slog.Error("unexpected SSH message type", "expected", sshMsgKexinit, "got", payload[0])
+	if err := validateKEXINITPayload(payload); err != nil {
+		slog.Error("unexpected SSH packet payload", "err", err.Error())
 		os.Exit(remoteConnError)
 	}
 
@@ -536,6 +594,17 @@ func getRemoteConfig(host string, port int) config {
 	return c
 }
 
+func validateKEXINITPayload(payload []byte) error {
+	const sshMsgKexinit = 20
+	if len(payload) < 1 {
+		return fmt.Errorf("empty payload, expected message type %d", sshMsgKexinit)
+	}
+	if payload[0] != sshMsgKexinit {
+		return fmt.Errorf("expected message type %d, got %d", sshMsgKexinit, payload[0])
+	}
+	return nil
+}
+
 // kexExtensions are pseudo-algorithms in KEXINIT used for capability signalling,
 // not actual key exchange algorithms — ext-info-s (RFC 8308) and the Terrapin fix
 // signal (OpenSSH 9.6+). Filtering them prevents false "unknown setting" warnings.
@@ -556,9 +625,14 @@ func filterKexExtensions(algos string) string {
 func main() {
 	p := getParams()
 	initLog(p.debug)
+	if err := validateParams(p); err != nil {
+		slog.Error("invalid arguments", "err", err.Error())
+		os.Exit(paramError)
+	}
 
 	if p.generate != "" {
 		generateSnippet(p.generate, p.strict)
+		os.Exit(noError)
 	}
 
 	checked := false
@@ -569,7 +643,7 @@ func main() {
 		MACs(c)
 		HostKeyAlgorithms(c)
 		checked = true
-	} else if p.config != "" || p.generate == "" {
+	} else {
 		var buf []byte
 		if p.config != "" {
 			buf = loadSshdConfig(p.config)
@@ -590,7 +664,11 @@ func main() {
 	}
 
 	if checked {
-		slog.Info("check summary", "strict", p.strict, "warnings", cntWarn, "errors", cntErr)
+		slog.Info("check summary", "strict", p.strict, "warnings", cntWarn, "errors", cntErr, "missing", cntMissing)
+		if cntMissing > 0 {
+			slog.Error("check result: INCOMPLETE CONFIG")
+			os.Exit(incompleteConfigError)
+		}
 		if cntErr > 0 || p.strict && cntWarn > 0 {
 			slog.Error("check result: FAILED")
 			os.Exit(checkFailed)
