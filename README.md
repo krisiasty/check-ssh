@@ -338,4 +338,10 @@ sudo check-ssh -generate /etc/ssh/sshd_config.d/99-ssh-hardened.conf -strict
 
 ---
 
+## Related tools
+
+[ssh-audit](https://github.com/jtesta/ssh-audit) is the most established tool in this space — Python-based, actively maintained, with broader remote-scan capabilities (CVE matching, banner-based version detection, and custom policy mode). `check-ssh` is a smaller, complementary alternative emphasizing three things: a single static binary with no runtime dependencies, auditing the live local daemon via `sshd -T`, and generation of `sshd_config.d` drop-in snippets that subtract weak algorithms from sshd's defaults.
+
+---
+
 *Local and config-file modes must be run as root (or via `sudo`) because `sshd -T` requires access to host key files.*
