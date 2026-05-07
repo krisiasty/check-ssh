@@ -325,9 +325,9 @@ func TestParseNameList(t *testing.T) {
 
 func TestFilterKexExtensions(t *testing.T) {
 	tests := []struct {
-		name   string
-		in     string
-		want   string
+		name string
+		in   string
+		want string
 	}{
 		{"empty", "", ""},
 		{"only extensions", "ext-info-s,kex-strict-s-v00@openssh.com", ""},
@@ -345,9 +345,9 @@ func TestFilterKexExtensions(t *testing.T) {
 
 func TestMergeAlgos(t *testing.T) {
 	tests := []struct {
-		name    string
-		a, b    string
-		want    string
+		name string
+		a, b string
+		want string
 	}{
 		{"both empty", "", "", ""},
 		{"a empty", "", "x,y", "x,y"},
