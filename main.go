@@ -30,12 +30,13 @@ var (
 	date    = "unknown"
 )
 
-// global counters
-var (
-	cntWarn    = 0 // total number of warnings
-	cntErr     = 0 // total number of errors
-	cntMissing = 0 // total number of missing required settings
-)
+// result accumulates findings across rule checks: not-recommended/unknown values are warnings,
+// prohibited values are errors, and absent options are counted as missing.
+type result struct {
+	warnings int
+	errors   int
+	missing  int
+}
 
 type params struct {
 	path     string
@@ -44,9 +45,7 @@ type params struct {
 	port     int
 	generate string // non-empty: generate snippet to this path
 	strict   bool
-	version  bool
 	debug    bool
-	help     bool
 	pathSet  bool
 	portSet  bool
 }
@@ -152,14 +151,14 @@ func splitAlgos(s string) []string {
 	return result
 }
 
-func (r rule) check(c config) {
+func (r rule) check(c config, res *result) {
 	enabled, ok := c[strings.ToLower(r.option)]
 	if !ok || strings.TrimSpace(enabled) == "" {
 		slog.Error("missing required setting", "option", r.option)
-		cntMissing++
+		res.missing++
 		return
 	}
-	verify(r, enabled)
+	verify(r, enabled, res)
 }
 
 // configLine returns the sshd_config directive that removes disallowed values from the default set.
@@ -272,6 +271,7 @@ func getParams() params {
 	}
 
 	var c params
+	var showVersion, showHelp bool
 
 	injectGenerateDefault("99-ssh-hardened.conf")
 	flag.StringVar(&c.path, "path", "/usr/sbin/sshd", "full path to sshd binary")
@@ -280,9 +280,9 @@ func getParams() params {
 	flag.IntVar(&c.port, "port", 22, "remote SSH port")
 	flag.StringVar(&c.generate, "generate", "", `generate sshd_config.d snippet to filename (when used without value: "99-ssh-hardened.conf")`)
 	flag.BoolVar(&c.strict, "strict", false, "strict check: fail on warnings")
-	flag.BoolVar(&c.version, "version", false, "print program version and quit")
+	flag.BoolVar(&showVersion, "version", false, "print program version and quit")
 	flag.BoolVar(&c.debug, "debug", false, "increase logging level")
-	flag.BoolVar(&c.help, "help", false, "print help and exit")
+	flag.BoolVar(&showHelp, "help", false, "print help and exit")
 	flag.Parse()
 	flag.Visit(func(f *flag.Flag) {
 		switch f.Name {
@@ -293,12 +293,12 @@ func getParams() params {
 		}
 	})
 
-	if c.version {
+	if showVersion {
 		fmt.Printf("%s version: %s (commit: %s, build date: %s)\n", prog, version, commit, date)
 		os.Exit(noError)
 	}
 
-	if c.help {
+	if showHelp {
 		flag.Usage()
 		os.Exit(noError)
 	}
@@ -324,7 +324,7 @@ func validateParams(c params) error {
 	if c.host != "" && c.config != "" {
 		return fmt.Errorf("-host cannot be combined with -config")
 	}
-	if c.port < 1 || c.port > 65535 {
+	if c.host != "" && (c.port < 1 || c.port > 65535) {
 		return fmt.Errorf("-port must be between 1 and 65535, got %d", c.port)
 	}
 	return nil
@@ -364,7 +364,6 @@ func parseSshdConfig(buf []byte) config {
 	slog.Debug("parsing sshd config")
 	c := make(config)
 	for line := range strings.SplitSeq(string(buf), "\n") {
-		line = strings.TrimRight(line, "\r")
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -404,8 +403,9 @@ func loadSshdConfig(file string) ([]byte, error) {
 	return buf, nil
 }
 
-// verify if enabled options match recommended, not recommended or prohibited lists
-func verify(r rule, enabled string) {
+// verify checks each enabled value against the rule's recommended/notRecommended/prohibited lists
+// and updates the running result accordingly.
+func verify(r rule, enabled string, res *result) {
 	slog.Info("verifying", "option", r.option)
 	slog.Debug("enabled values", "option", r.option, "values", enabled)
 	slog.Debug("recommended values", "option", r.option, "values", r.recommended)
@@ -417,48 +417,16 @@ func verify(r rule, enabled string) {
 			slog.Info("found recommended setting", "option", r.option, "value", v)
 		case slices.Contains(r.nrList, v):
 			slog.Warn("found not recommended setting", "option", r.option, "value", v)
-			cntWarn++
+			res.warnings++
 		case slices.Contains(r.prList, v):
 			slog.Error("found prohibited setting", "option", r.option, "value", v)
-			cntErr++
+			res.errors++
 		default:
 			slog.Warn("found unknown setting", "option", r.option, "value", v)
-			cntWarn++
+			res.warnings++
 		}
 	}
 }
-
-// verify CASignatureAlgorithms
-// https://man.openbsd.org/sshd_config#CASignatureAlgorithms
-func CASignatureAlgorithms(c config) { ruleCASignatureAlgorithms.check(c) }
-
-// verify Ciphers
-// https://man.openbsd.org/sshd_config#Ciphers
-func Ciphers(c config) { ruleCiphers.check(c) }
-
-// verify HostbasedAcceptedAlgorithms (former: HostbasedAcceptedKeyTypes)
-// https://man.openbsd.org/sshd_config#HostbasedAcceptedAlgorithms
-func HostbasedAcceptedAlgorithms(c config) { ruleHostbasedAcceptedAlgorithms.check(c) }
-
-// verify HostbasedAuthentication
-// https://man.openbsd.org/sshd_config#HostbasedAuthentication
-func HostbasedAuthentication(c config) { ruleHostbasedAuthentication.check(c) }
-
-// verify HostKeyAlgorithms
-// https://man.openbsd.org/sshd_config#HostKeyAlgorithms
-func HostKeyAlgorithms(c config) { ruleHostKeyAlgorithms.check(c) }
-
-// verify KexAlgorithms
-// https://man.openbsd.org/sshd_config#KexAlgorithms
-func KexAlgorithms(c config) { ruleKexAlgorithms.check(c) }
-
-// verify MACs
-// https://man.openbsd.org/sshd_config#MACs
-func MACs(c config) { ruleMACs.check(c) }
-
-// verify PubkeyAcceptedAlgorithms (former: PubkeyAcceptedKeyTypes)
-// https://man.openbsd.org/sshd_config#PubkeyAcceptedAlgorithms
-func PubkeyAcceptedAlgorithms(c config) { rulePubkeyAcceptedAlgorithms.check(c) }
 
 // generateSnippet writes an sshd_config.d snippet that restricts each option to recommended values.
 // In strict mode only recommended values are included; otherwise not-recommended are included too.
@@ -492,7 +460,7 @@ func generateSnippet(path string, strict bool) error {
 func readSSHBanner(r *bufio.Reader) (string, error) {
 	for range maxSSHBannerLines {
 		line, err := r.ReadSlice('\n')
-		if err == bufio.ErrBufferFull {
+		if errors.Is(err, bufio.ErrBufferFull) {
 			return "", fmt.Errorf("SSH banner line too long")
 		}
 		if err != nil {
@@ -698,13 +666,14 @@ func main() {
 		os.Exit(noError)
 	}
 
+	var res result
 	if p.host != "" {
 		c, err := getRemoteConfig(p.host, p.port)
 		exitOnError(err)
-		KexAlgorithms(c)
-		Ciphers(c)
-		MACs(c)
-		HostKeyAlgorithms(c)
+		ruleKexAlgorithms.check(c, &res)
+		ruleCiphers.check(c, &res)
+		ruleMACs.check(c, &res)
+		ruleHostKeyAlgorithms.check(c, &res)
 	} else {
 		var buf []byte
 		var err error
@@ -716,22 +685,22 @@ func main() {
 		}
 		exitOnError(err)
 		c := parseSshdConfig(buf)
-		CASignatureAlgorithms(c)
-		Ciphers(c)
-		HostbasedAcceptedAlgorithms(c)
-		HostbasedAuthentication(c)
-		HostKeyAlgorithms(c)
-		KexAlgorithms(c)
-		MACs(c)
-		PubkeyAcceptedAlgorithms(c)
+		ruleCASignatureAlgorithms.check(c, &res)
+		ruleCiphers.check(c, &res)
+		ruleHostbasedAcceptedAlgorithms.check(c, &res)
+		ruleHostbasedAuthentication.check(c, &res)
+		ruleHostKeyAlgorithms.check(c, &res)
+		ruleKexAlgorithms.check(c, &res)
+		ruleMACs.check(c, &res)
+		rulePubkeyAcceptedAlgorithms.check(c, &res)
 	}
 
-	slog.Info("check summary", "strict", p.strict, "warnings", cntWarn, "errors", cntErr, "missing", cntMissing)
-	if cntMissing > 0 {
+	slog.Info("check summary", "strict", p.strict, "warnings", res.warnings, "errors", res.errors, "missing", res.missing)
+	if res.missing > 0 {
 		slog.Error("check result: INCOMPLETE CONFIG")
 		os.Exit(incompleteConfigError)
 	}
-	if cntErr > 0 || (p.strict && cntWarn > 0) {
+	if res.errors > 0 || (p.strict && res.warnings > 0) {
 		slog.Error("check result: FAILED")
 		os.Exit(checkFailed)
 	}
