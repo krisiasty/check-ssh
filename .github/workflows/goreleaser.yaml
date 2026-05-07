@@ -32,7 +32,7 @@ jobs:
       - name: Go Mod Verify
         run: go mod verify          
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           # either 'goreleaser' (default) or 'goreleaser-pro'
           distribution: goreleaser
