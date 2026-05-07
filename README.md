@@ -302,12 +302,10 @@ sudo check-ssh -generate /etc/ssh/sshd_config.d/00-ssh-hardened.conf -strict
    Include /etc/ssh/sshd_config.d/*.conf
    ```
 
-2. **Place the file in the drop-in directory and set ownership:**
+2. **Place the file in the drop-in directory with correct ownership and mode:**
 
    ```bash
-   sudo cp 00-ssh-hardened.conf /etc/ssh/sshd_config.d/
-   sudo chown root:root /etc/ssh/sshd_config.d/00-ssh-hardened.conf
-   sudo chmod 644 /etc/ssh/sshd_config.d/00-ssh-hardened.conf
+   sudo install -o root -g root -m 644 00-ssh-hardened.conf /etc/ssh/sshd_config.d/
    ```
 
    > sshd silently ignores drop-in files not owned by root.
