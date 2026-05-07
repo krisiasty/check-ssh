@@ -321,7 +321,10 @@ sudo check-ssh -generate /etc/ssh/sshd_config.d/00-ssh-hardened.conf -strict
 4. **Reload sshd** (existing sessions are not interrupted):
 
    ```bash
-   # systemd:
+   # systemd (Debian, Ubuntu, and derivatives — unit is named ssh):
+   sudo systemctl reload ssh
+
+   # systemd (RHEL, Fedora, Arch, SUSE, and most others — unit is named sshd):
    sudo systemctl reload sshd
 
    # macOS:
