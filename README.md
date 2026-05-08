@@ -7,7 +7,7 @@
 **Homebrew (macOS):**
 
 ```bash
-brew install krisiasty/tap/check-ssh
+brew install --cask krisiasty/tap/check-ssh
 ```
 
 **Pre-built binaries** for Linux, macOS, and Windows are published on the [releases page](https://github.com/krisiasty/check-ssh/releases).
