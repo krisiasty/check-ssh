@@ -1,30 +1,84 @@
 version: 2
 
-before:
-  hooks:
-    - go mod tidy
+project_name: check-ssh
 
 builds:
-  - env:
+  - id: darwin
+    binary: check-ssh
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    env:
       - CGO_ENABLED=0
     goos:
-      - linux
-      - windows
       - darwin
     goarch:
       - amd64
       - arm64
-    mod_timestamp: "{{ .CommitTimestamp }}"
-  
+  - id: others
+    binary: check-ssh
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+upx:
+  - enabled: true
+    compress: best
+    lzma: true
 
 archives:
-  - format: binary
+  - id: binaries
+    formats:
+      - binary
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - id: archives
+    builds:
+      - darwin
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+brews:
+  - name: check-ssh
+    ids:
+      - archives
+    homepage: "https://github.com/krisiasty/check-ssh"
+    description: "Audits sshd for weak or insecure algorithms across local, file-based, and remote scans, and generates a drop-in hardening config."
+    license: "Apache-2.0"
+    repository:
+      owner: krisiasty
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    install: |
+      bin.install "check-ssh"
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
 
-snapshot:
-  name_template: "snapshot"
+changelog:
+  sort: asc
+  abbrev: 8
+  format: "- [{{ .SHA }}](https://github.com/krisiasty/check-ssh/commit/{{ .SHA }}) {{ .Message }}"
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
 
-env_files:
-  github_token: ~/.config/goreleaser/github_token
+release:
+  prerelease: "{{ .IsV0 }}"
