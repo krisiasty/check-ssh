@@ -6,13 +6,17 @@
 
 The tool operates in four modes:
 
-**Local mode** (default) — runs `sshd -T` on the local machine to obtain the fully-resolved, active configuration, checks all supported options, and inspects each `HostKey` to verify its bit length. Requires root because `sshd -T` needs access to host key files.
+**Local mode** (default) — runs `sshd -T` on the local machine to obtain the fully-resolved, active configuration, checks all supported options, and inspects each `HostKey` to verify its bit length.
+Requires root because `sshd -T` needs access to host key files.
 
-**Config-file mode** (`-config`) — reads a file containing the output of a previously captured `sshd -T` command and checks all supported options. Useful for offline/CI auditing or auditing a remote host when you can copy the file.
+**Config-file mode** (`-config`) — reads a file containing the output of a previously captured `sshd -T` command and checks all supported options. Useful for offline/CI auditing or auditing a remote
+host when you can copy the file.
 
-**Remote mode** (`-host`) — connects to a remote SSH server, reads the unencrypted SSH handshake (`KEXINIT` message), and checks the subset of options advertised there. No credentials or authentication are required. See [Limitations of remote mode](#limitations-of-remote-mode) below.
+**Remote mode** (`-host`) — connects to a remote SSH server, reads the unencrypted SSH handshake (`KEXINIT` message), and checks the subset of options advertised there.
+No credentials or authentication are required. See [Limitations of remote mode](#limitations-of-remote-mode) below.
 
-**Generation mode** (`-generate`) — writes an `sshd_config.d` drop-in snippet that removes disallowed algorithms from sshd's defaults. This is a standalone mode and cannot be combined with local, config-file, or remote scanning.
+**Generation mode** (`-generate`) — writes an `sshd_config.d` drop-in snippet that removes disallowed algorithms from sshd's defaults.
+This is a standalone mode and cannot be combined with local, config-file, or remote scanning.
 
 In scan modes, every enabled value is classified as **recommended**, **not recommended**, **prohibited**, or **unknown** (treated as a warning). Exit codes are listed below.
 
@@ -256,20 +260,22 @@ Algorithms accepted for public-key client authentication. Checked in **local and
 
 In addition to algorithm classification, **local mode** opens each `HostKey` referenced by `sshd -T` (reading the corresponding `.pub` file beside the private key) and reports the key's bit length. Sizes that are fixed by the algorithm name (Ed25519, Ed448, ECDSA P-256/P-384/P-521) are logged but not classified — the algorithm itself is already covered by the `HostKeyAlgorithms` rule. RSA and DSA keys, whose sizes vary, are classified against thresholds:
 
-| Key type | Status          | Threshold      | Reason                                                                                       |
-|----------|-----------------|----------------|----------------------------------------------------------------------------------------------|
-| RSA      | Recommended     | >= 3072 bits   | NIST SP 800-57 considers 3072-bit RSA equivalent to 128-bit symmetric strength.              |
+| Key type | Status          | Threshold     | Reason                                                                                      |
+|----------|-----------------|---------------|---------------------------------------------------------------------------------------------|
+| RSA      | Recommended     | ≥ 3072 bits   | NIST SP 800-57 considers 3072-bit RSA equivalent to 128-bit symmetric strength.             |
 | RSA      | Not recommended | 2048–3071 bits | 2048-bit RSA (~112-bit equivalent) is acceptable today but deprecated for new use post-2030. |
-| RSA      | Prohibited      | < 2048 bits    | Below NIST's minimum for any new use; 1024-bit RSA is broken in practical terms.             |
-| DSA      | Prohibited      | any            | DSA host keys are limited to 1024 bits and the algorithm itself is deprecated.               |
+| RSA      | Prohibited      | < 2048 bits   | Below NIST's minimum for any new use; 1024-bit RSA is broken in practical terms.            |
+| DSA      | Prohibited      | any           | DSA host keys are limited to 1024 bits and the algorithm itself is deprecated.              |
 
-Size checks run only in **local mode**. Config-file mode (`-config`) and remote mode (`-host`) emit a log warning that key sizes cannot be verified and skip the check — the public key bytes are not present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` handshake.
+Size checks run only in **local mode**. Config-file mode (`-config`) and remote mode (`-host`) emit a log warning that key sizes cannot be verified and skip the check —
+the public key bytes are not present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` handshake.
 
 ---
 
 ## Limitations of remote mode
 
-Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No credentials are required and no authentication takes place.
+Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message.
+No credentials are required and no authentication takes place.
 
 Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the eight supported settings**:
 
@@ -295,7 +301,8 @@ For a complete audit use local mode (`sudo check-ssh`) or capture `sshd -T` outp
 
 ## Generating and installing a configuration snippet
 
-`check-ssh -generate` produces a drop-in `sshd_config.d` file that removes all disallowed algorithms from sshd's defaults using the `-algorithm` subtraction syntax. It is a standalone mode; it cannot be combined with local, config-file, or remote scanning. Adding `-strict` also removes not-recommended algorithms.
+`check-ssh -generate` produces a drop-in `sshd_config.d` file that removes all disallowed algorithms from sshd's defaults using the `-algorithm` subtraction syntax.
+It is a standalone mode and cannot be combined with local, config-file, or remote scanning. Adding `-strict` also removes not-recommended algorithms.
 
 ### Generate
 
@@ -357,17 +364,23 @@ sudo check-ssh -generate /etc/ssh/sshd_config.d/00-ssh-hardened.conf -strict
 
 ## Related tools
 
-[ssh-audit](https://github.com/jtesta/ssh-audit) is the most established tool in this space — Python-based, actively maintained, with broader remote-scan capabilities (CVE matching, banner-based version detection, and custom policy mode). `check-ssh` is a smaller, complementary alternative emphasizing three things: a single static binary with no runtime dependencies, auditing the live local daemon via `sshd -T`, and generation of `sshd_config.d` drop-in snippets that subtract weak algorithms from sshd's defaults.
+[ssh-audit](https://github.com/jtesta/ssh-audit) is the most established tool in this space — Python-based, actively maintained, with broader remote-scan capabilities (CVE matching, banner-based
+version detection, and custom policy mode). `check-ssh` is a smaller, complementary alternative emphasizing three things: a single static binary with no runtime dependencies, auditing the live local
+daemon via `sshd -T`, and generation of `sshd_config.d` drop-in snippets that subtract weak algorithms from sshd's defaults.
 
 ### Classification differences
 
 If you also run ssh-audit against the same server, you may see different verdicts. The two tools are highly opinionated and apply different philosophies; the differences worth knowing:
 
-**NIST P-curves.** `check-ssh` classifies `ecdh-sha2-nistp384` and `ecdh-sha2-nistp521` as *recommended*, and `ecdh-sha2-nistp256` as *not recommended* (smaller security margin). ssh-audit flags all NIST curves as failures, citing the unexplained seed values originally raised by djb and others. That concern is well-known but speculative — the NIST P-curves remain FIPS-approved, are mandated by NSA's CNSA suite, and have no demonstrated weakness after 25+ years of public cryptanalysis. If you prefer the conservative position, drop them and rely on `curve25519-sha256` and `sntrup761x25519-sha512@openssh.com` instead.
+**NIST P-curves.** `check-ssh` classifies `ecdh-sha2-nistp384` and `ecdh-sha2-nistp521` as *recommended*, and `ecdh-sha2-nistp256` as *not recommended* (smaller security margin). ssh-audit flags all
+NIST curves as failures, citing the unexplained seed values originally raised by djb and others. That concern is well-known but speculative — the NIST P-curves remain FIPS-approved, are mandated b
+NSA's CNSA suite, and have no demonstrated weakness after 25+ years of public cryptanalysis.
+*If you prefer the conservative position, drop them and rely on `curve25519-sha256` and `sntrup761x25519-sha512@openssh.com` instead.*
 
-**Algorithm breadth.** ssh-audit's `(rec) +<algorithm>` recommendations suggest *adding* some algorithms (CTR ciphers, classical DH groups, RSA-SHA-256), while `check-ssh` classifies those as *not recommended* on the basis that the server already offers stronger alternatives.
+**Algorithm breadth.** ssh-audit's `(rec) +<algorithm>` recommendations suggest *adding* some algorithms (CTR ciphers, classical DH groups, RSA-SHA-256), while `check-ssh` classifies those as
+*not recommended* on the basis that the server already offers stronger alternatives.
 In short: ssh-audit proposal results in broaden compatibility (read: support old ssh clients), while `check-ssh` recommendations are purely based on security and algorithm strength.
-Objectively, if a client can't speak `aes256-gcm@openssh.com` or `chacha20-poly1305@openssh.com` and `curve25519-sha256` in 2026, the right answer is "fix the client," not "weaken the server."
+Objectively, if a client can't speak aes256-gcm@openssh.com or chacha20-poly1305@openssh.com and curve25519-sha256 in 2026, the right answer is "fix the client," not "weaken the server".
 
 ---
 
