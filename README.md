@@ -2,6 +2,22 @@
 
 `check-ssh` audits an SSH server's configuration against security best practices. It can inspect a local daemon, a pre-captured config file, or a remote host reached over the network.
 
+## Installation
+
+**Homebrew (macOS):**
+
+```bash
+brew install krisiasty/tap/check-ssh
+```
+
+**Pre-built binaries** for Linux, macOS, and Windows are published on the [releases page](https://github.com/krisiasty/check-ssh/releases).
+
+**From source** (requires Go 1.26+):
+
+```bash
+go install github.com/krisiasty/check-ssh@latest
+```
+
 ## How it works
 
 The tool operates in four modes:
@@ -319,7 +335,7 @@ sudo check-ssh -generate /etc/ssh/sshd_config.d/00-ssh-hardened.conf
 sudo check-ssh -generate /etc/ssh/sshd_config.d/00-ssh-hardened.conf -strict
 ```
 
-### Install
+### Install snippet
 
 1. **Ensure the drop-in directory is included.** Modern OpenSSH includes this by default, but verify that `/etc/ssh/sshd_config` contains:
 
