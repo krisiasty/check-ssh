@@ -256,12 +256,12 @@ Algorithms accepted for public-key client authentication. Checked in **local and
 
 In addition to algorithm classification, **local mode** opens each `HostKey` referenced by `sshd -T` (reading the corresponding `.pub` file beside the private key) and reports the key's bit length. Sizes that are fixed by the algorithm name (Ed25519, Ed448, ECDSA P-256/P-384/P-521) are logged but not classified — the algorithm itself is already covered by the `HostKeyAlgorithms` rule. RSA and DSA keys, whose sizes vary, are classified against thresholds:
 
-| Key type | Status          | Threshold     | Reason                                                                                      |
-|----------|-----------------|---------------|---------------------------------------------------------------------------------------------|
-| RSA      | Recommended     | ≥ 3072 bits   | NIST SP 800-57 considers 3072-bit RSA equivalent to 128-bit symmetric strength.             |
+| Key type | Status          | Threshold      | Reason                                                                                       |
+|----------|-----------------|----------------|----------------------------------------------------------------------------------------------|
+| RSA      | Recommended     | >= 3072 bits   | NIST SP 800-57 considers 3072-bit RSA equivalent to 128-bit symmetric strength.              |
 | RSA      | Not recommended | 2048–3071 bits | 2048-bit RSA (~112-bit equivalent) is acceptable today but deprecated for new use post-2030. |
-| RSA      | Prohibited      | < 2048 bits   | Below NIST's minimum for any new use; 1024-bit RSA is broken in practical terms.            |
-| DSA      | Prohibited      | any           | DSA host keys are limited to 1024 bits and the algorithm itself is deprecated.              |
+| RSA      | Prohibited      | < 2048 bits    | Below NIST's minimum for any new use; 1024-bit RSA is broken in practical terms.             |
+| DSA      | Prohibited      | any            | DSA host keys are limited to 1024 bits and the algorithm itself is deprecated.               |
 
 Size checks run only in **local mode**. Config-file mode (`-config`) and remote mode (`-host`) emit a log warning that key sizes cannot be verified and skip the check — the public key bytes are not present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` handshake.
 
