@@ -47,13 +47,13 @@ archives:
       - binary
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
   - id: archives
-    builds:
+    ids:
       - darwin
     formats:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
-brews:
+homebrew_casks:
   - name: check-ssh
     ids:
       - archives
@@ -64,8 +64,8 @@ brews:
       owner: krisiasty
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    install: |
-      bin.install "check-ssh"
+    binaries:
+      - check-ssh
 
 checksum:
   name_template: "checksums.txt"
