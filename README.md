@@ -367,7 +367,7 @@ If you also run ssh-audit against the same server, you may see different verdict
 
 **Algorithm breadth.** ssh-audit's `(rec) +<algorithm>` recommendations suggest *adding* some algorithms (CTR ciphers, classical DH groups, RSA-SHA-256), while `check-ssh` classifies those as *not recommended* on the basis that the server already offers stronger alternatives.
 In short: ssh-audit proposal results in broaden compatibility (read: support old ssh clients), while `check-ssh` recommendations are purely based on security and algorithm strength.
-Objectively, if a client can't speak aes256-gcm@openssh.com or chacha20-poly1305@openssh.com and curve25519-sha256 in 2026, the right answer is "fix the client," not "weaken the server."
+Objectively, if a client can't speak `aes256-gcm@openssh.com` or `chacha20-poly1305@openssh.com` and `curve25519-sha256` in 2026, the right answer is "fix the client," not "weaken the server."
 
 ---
 
