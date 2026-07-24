@@ -524,6 +524,12 @@ var cisRecommendedValues = []struct {
 		recommended: "yes",
 		accept:      func(got string) bool { return got == "yes" },
 	},
+	{
+		option:      "PermitRootLogin",
+		snippet:     "no",
+		recommended: "no",
+		accept:      func(got string) bool { return got == "no" },
+	},
 }
 
 // checkRecommendedValue verifies a single-value directive is compliant per its accept predicate.
