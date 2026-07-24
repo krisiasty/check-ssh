@@ -83,6 +83,21 @@ check-ssh -help
 
 ## Checked settings and algorithm classifications
 
+### Access control (AllowUsers / AllowGroups / DenyUsers / DenyGroups)
+
+Restricts which users or groups may authenticate. Checked in **local and config-file modes only**.
+
+By default sshd permits any account to authenticate, so CIS recommends configuring **at least one** of these allow/deny lists. This check is **recommended but not required**: if none of the four is
+configured it reports a warning (the run still passes), while in strict mode that warning fails the run (exit 99). Configuring any one of them satisfies the check. The generated snippet emits
+`AllowGroups sudo` to satisfy it — **tailor this to your environment** (replace `sudo` with the group that should have SSH access).
+
+| Status          | Value                                                        | Reason                                                                          |
+| --------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Recommended     | at least one of `AllowUsers`/`AllowGroups`/`DenyUsers`/`DenyGroups` | Explicitly bounds who may log in, rather than permitting every account. |
+| Not recommended | none configured                                              | sshd allows any account to authenticate; access is not restricted by policy.    |
+
+---
+
 ### CASignatureAlgorithms
 
 Algorithms accepted for CA signatures on certificates. Checked in **local and config-file modes only**.
@@ -434,22 +449,23 @@ meaningful there).
 Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No
 credentials are required and no authentication takes place.
 
-Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the sixteen supported settings**:
+Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the seventeen supported settings**:
 
-| Checked in remote mode              | Not checked in remote mode    |
-| ----------------------------------- | ----------------------------- |
-| `KexAlgorithms`                     | `CASignatureAlgorithms`       |
-| `HostKeyAlgorithms`                 | `ClientAliveInterval`         |
-| `Ciphers` (server→client direction) | `ClientAliveCountMax`         |
-| `MACs` (server→client direction)    | `HostbasedAcceptedAlgorithms` |
-|                                     | `HostbasedAuthentication`     |
-|                                     | `IgnoreRhosts`                |
-|                                     | `PermitEmptyPasswords`        |
-|                                     | `PermitRootLogin`             |
-|                                     | `PermitUserEnvironment`       |
-|                                     | `PubkeyAcceptedAlgorithms`    |
-|                                     | `Subsystem` (sftp)            |
-|                                     | `UsePAM`                      |
+| Checked in remote mode              | Not checked in remote mode        |
+| ----------------------------------- | --------------------------------- |
+| `KexAlgorithms`                     | Access control (Allow/Deny lists) |
+| `HostKeyAlgorithms`                 | `CASignatureAlgorithms`           |
+| `Ciphers` (server→client direction) | `ClientAliveInterval`             |
+| `MACs` (server→client direction)    | `ClientAliveCountMax`             |
+|                                     | `HostbasedAcceptedAlgorithms`     |
+|                                     | `HostbasedAuthentication`         |
+|                                     | `IgnoreRhosts`                    |
+|                                     | `PermitEmptyPasswords`            |
+|                                     | `PermitRootLogin`                 |
+|                                     | `PermitUserEnvironment`           |
+|                                     | `PubkeyAcceptedAlgorithms`        |
+|                                     | `Subsystem` (sftp)                |
+|                                     | `UsePAM`                          |
 
 Additional caveats:
 

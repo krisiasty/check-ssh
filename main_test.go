@@ -228,6 +228,9 @@ func TestGenerateSnippet(t *testing.T) {
 	if !strings.Contains(string(got), "UsePAM yes") {
 		t.Fatalf("snippet missing UsePAM directive:\n%s", got)
 	}
+	if !strings.Contains(string(got), "AllowGroups sudo") {
+		t.Fatalf("snippet missing AllowGroups directive:\n%s", got)
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("os.Stat() error = %v", err)
@@ -903,5 +906,48 @@ func TestCheckRecommendedValue(t *testing.T) {
 				t.Errorf("got errors=%d warnings=%d, want errors=0 warnings=%d", res.errors, res.warnings, tt.warnings)
 			}
 		})
+	}
+}
+
+func TestCheckAccessControl(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   config
+		warnings int
+	}{
+		{"AllowUsers satisfies", config{"allowusers": {"alice bob"}}, 0},
+		{"AllowGroups satisfies", config{"allowgroups": {"sudo"}}, 0},
+		{"DenyUsers satisfies", config{"denyusers": {"mallory"}}, 0},
+		{"DenyGroups satisfies", config{"denygroups": {"guests"}}, 0},
+		{"none configured warns", config{}, 1},
+		{"present but empty warns", config{"allowgroups": {""}}, 1},
+		{"unrelated options warn", config{"permitrootlogin": {"no"}}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var res result
+			checkAccessControl(tt.config, &res)
+			if res.warnings != tt.warnings || res.errors != 0 {
+				t.Errorf("got errors=%d warnings=%d, want errors=0 warnings=%d", res.errors, res.warnings, tt.warnings)
+			}
+		})
+	}
+}
+
+// TestGeneratedSnippetSatisfiesAccessControl parses the generated snippet and confirms its
+// AllowGroups directive satisfies checkAccessControl (no warning).
+func TestGeneratedSnippetSatisfiesAccessControl(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "snippet.conf")
+	if err := generateSnippet(path, false); err != nil {
+		t.Fatalf("generateSnippet() error = %v", err)
+	}
+	buf, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res result
+	checkAccessControl(parseSshdConfig(buf), &res)
+	if res.warnings != 0 {
+		t.Errorf("generated snippet should satisfy access-control check, got warnings=%d", res.warnings)
 	}
 }

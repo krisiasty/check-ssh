@@ -579,6 +579,32 @@ func checkRecommendedValue(c config, option, recommended string, accept func(got
 	res.warnings++
 }
 
+// accessControlOptions gate which users or groups may log in. sshd permits any account by default,
+// so CIS recommends configuring at least one allow/deny list to restrict access.
+var accessControlOptions = []string{"AllowUsers", "AllowGroups", "DenyUsers", "DenyGroups"}
+
+// accessControlSnippet is the access-control directive emitted by the generated snippet; it
+// satisfies checkAccessControl. Operators should tailor it to their environment (e.g. replace
+// "sudo" with the group that should be allowed SSH access).
+const accessControlSnippet = "AllowGroups sudo"
+
+// checkAccessControl verifies that at least one of AllowUsers/AllowGroups/DenyUsers/DenyGroups is
+// configured. Having none is a warning (recommended but not required), which passes in normal mode
+// and fails in strict mode via the run's overall strict handling. Checked in local and config-file
+// modes only (not advertised in the KEXINIT handshake).
+func checkAccessControl(c config, res *result) {
+	slog.Info("verifying", "option", "access control (AllowUsers/AllowGroups/DenyUsers/DenyGroups)")
+	for _, opt := range accessControlOptions {
+		vals := c[strings.ToLower(opt)]
+		if len(vals) > 0 && strings.TrimSpace(vals[len(vals)-1]) != "" {
+			slog.Info("found access control setting", "option", opt, "value", strings.TrimSpace(vals[len(vals)-1]))
+			return
+		}
+	}
+	slog.Warn("no access control configured; set at least one of AllowUsers, AllowGroups, DenyUsers, or DenyGroups")
+	res.warnings++
+}
+
 // generateSnippet writes an sshd_config.d snippet that restricts each option to recommended values.
 // In strict mode only recommended values are included; otherwise not-recommended are included too.
 func generateSnippet(path string, strict bool) error {
@@ -597,6 +623,7 @@ func generateSnippet(path string, strict bool) error {
 	for _, v := range cisRecommendedValues {
 		fmt.Fprintf(&sb, "%s %s\n", v.option, v.snippet)
 	}
+	fmt.Fprintln(&sb, accessControlSnippet)
 	if err := os.WriteFile(path, []byte(sb.String()), cisConfigFileMode); err != nil {
 		slog.Error("cannot write snippet", "path", path, "err", err.Error())
 		return newExitError(generateError, "cannot write snippet to %s: %w", path, err)
@@ -961,6 +988,7 @@ func main() {
 		for _, v := range cisRecommendedValues {
 			checkRecommendedValue(c, v.option, v.recommended, v.accept, &res)
 		}
+		checkAccessControl(c, &res)
 		if p.config != "" {
 			slog.Warn("host key sizes and file permissions cannot be verified in config-file mode; use local mode (no -config) for those checks")
 		} else {
