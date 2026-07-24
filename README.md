@@ -124,6 +124,37 @@ Symmetric ciphers used to encrypt the session payload.
 
 ---
 
+### ClientAliveInterval
+
+Idle timeout: seconds between keepalive probes the server sends to an inactive client. Checked in **local and config-file modes only**.
+
+Recommended for CIS compliance to bound idle sessions. This setting is **recommended but not required**: in normal mode an absent or non-compliant value is reported as a warning (the run still
+passes), while in strict mode that warning fails the run (exit 99). Any non-zero interval of at most 300 seconds is accepted — a **stricter (smaller) timeout passes**; only `0` (timeouts disabled)
+or a value above 300 warns. Works together with [ClientAliveCountMax](#clientalivecountmax) — `ClientAliveInterval 300` with `ClientAliveCountMax 0` disconnects an idle client after 300 seconds.
+The generated snippet always emits `ClientAliveInterval 300`.
+
+| Status          | Value            | Reason                                                                            |
+| --------------- | ---------------- | --------------------------------------------------------------------------------- |
+| Recommended     | `1`–`300`        | Non-zero idle timeout of at most 300 seconds; a stricter (smaller) value is fine. |
+| Not recommended | `0` or `> 300`   | `0` disables idle timeouts entirely; larger values exceed the CIS recommendation. |
+
+---
+
+### ClientAliveCountMax
+
+Number of missed keepalive probes tolerated before the server disconnects an unresponsive client. Checked in **local and config-file modes only**.
+
+Recommended for CIS compliance. This setting is **recommended but not required**: in normal mode an absent or differing value is reported as a warning (the run still passes), while in strict mode
+that warning fails the run (exit 99). With `ClientAliveCountMax 0` and [ClientAliveInterval](#clientaliveinterval) `300`, the server disconnects an idle client after the first missed probe (300
+seconds). The generated snippet always emits `ClientAliveCountMax 0`.
+
+| Status          | Value   | Reason                                                                                     |
+| --------------- | ------- | ------------------------------------------------------------------------------------------ |
+| Recommended     | `0`     | Disconnects an idle client on the first missed probe; the tightest CIS-recommended timeout. |
+| Not recommended | other   | Larger values extend how long an idle or dropped session lingers before disconnect.        |
+
+---
+
 ### HostbasedAcceptedAlgorithms
 
 Algorithms accepted for host-based client authentication. Checked in **local and config-file modes only**.
@@ -321,14 +352,16 @@ present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` h
 Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No
 credentials are required and no authentication takes place.
 
-Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the ten supported settings**:
+Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the twelve supported settings**:
 
 | Checked in remote mode              | Not checked in remote mode    |
 | ----------------------------------- | ----------------------------- |
 | `KexAlgorithms`                     | `CASignatureAlgorithms`       |
-| `HostKeyAlgorithms`                 | `HostbasedAcceptedAlgorithms` |
-| `Ciphers` (server→client direction) | `HostbasedAuthentication`     |
-| `MACs` (server→client direction)    | `PermitEmptyPasswords`        |
+| `HostKeyAlgorithms`                 | `ClientAliveInterval`         |
+| `Ciphers` (server→client direction) | `ClientAliveCountMax`         |
+| `MACs` (server→client direction)    | `HostbasedAcceptedAlgorithms` |
+|                                     | `HostbasedAuthentication`     |
+|                                     | `PermitEmptyPasswords`        |
 |                                     | `PubkeyAcceptedAlgorithms`    |
 |                                     | `Subsystem` (sftp)            |
 

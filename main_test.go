@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -188,6 +189,12 @@ func TestGenerateSnippet(t *testing.T) {
 	}
 	if !strings.Contains(string(got), "Subsystem sftp internal-sftp") {
 		t.Fatalf("snippet missing Subsystem directive:\n%s", got)
+	}
+	if !strings.Contains(string(got), "ClientAliveInterval 300") {
+		t.Fatalf("snippet missing ClientAliveInterval directive:\n%s", got)
+	}
+	if !strings.Contains(string(got), "ClientAliveCountMax 0") {
+		t.Fatalf("snippet missing ClientAliveCountMax directive:\n%s", got)
 	}
 }
 
@@ -789,6 +796,41 @@ func TestCheckSFTPSubsystem(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var res result
 			checkSFTPSubsystem(tt.config, &res)
+			if res.warnings != tt.warnings || res.errors != 0 {
+				t.Errorf("got errors=%d warnings=%d, want errors=0 warnings=%d", res.errors, res.warnings, tt.warnings)
+			}
+		})
+	}
+}
+
+func TestCheckRecommendedValue(t *testing.T) {
+	interval := func(got string) bool {
+		n, err := strconv.Atoi(got)
+		return err == nil && n >= 1 && n <= 300
+	}
+	exactZero := func(got string) bool { return got == "0" }
+	tests := []struct {
+		name     string
+		config   config
+		option   string
+		accept   func(string) bool
+		warnings int
+	}{
+		{"interval 300 is recommended", config{"clientaliveinterval": {"300"}}, "ClientAliveInterval", interval, 0},
+		{"interval stricter non-zero is recommended", config{"clientaliveinterval": {"60"}}, "ClientAliveInterval", interval, 0},
+		{"interval 0 warns", config{"clientaliveinterval": {"0"}}, "ClientAliveInterval", interval, 1},
+		{"interval above 300 warns", config{"clientaliveinterval": {"600"}}, "ClientAliveInterval", interval, 1},
+		{"interval non-numeric warns", config{"clientaliveinterval": {"abc"}}, "ClientAliveInterval", interval, 1},
+		{"interval absent warns", config{}, "ClientAliveInterval", interval, 1},
+		{"countmax 0 is recommended", config{"clientalivecountmax": {"0"}}, "ClientAliveCountMax", exactZero, 0},
+		{"countmax nonzero warns", config{"clientalivecountmax": {"3"}}, "ClientAliveCountMax", exactZero, 1},
+		{"whitespace is trimmed", config{"clientaliveinterval": {"  60  "}}, "ClientAliveInterval", interval, 0},
+		{"last value wins", config{"clientaliveinterval": {"0", "120"}}, "ClientAliveInterval", interval, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var res result
+			checkRecommendedValue(tt.config, tt.option, "n/a", tt.accept, &res)
 			if res.warnings != tt.warnings || res.errors != 0 {
 				t.Errorf("got errors=%d warnings=%d, want errors=0 warnings=%d", res.errors, res.warnings, tt.warnings)
 			}

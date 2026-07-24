@@ -489,6 +489,57 @@ func checkSFTPSubsystem(c config, res *result) {
 	res.warnings++
 }
 
+// cisRecommendedValues are single-value directives recommended for CIS compliance but not
+// required: an absent or non-compliant value is reported as a warning, which passes in normal
+// mode and fails in strict mode via the run's overall strict handling. They don't fit the
+// algorithm-list rule model (a missing value must be a warning here, not an incomplete-config
+// error) so they're checked separately. The snippet value is emitted verbatim; the accept
+// predicate decides which observed values are compliant (which may be broader than the snippet
+// value, e.g. a stricter idle timeout).
+var cisRecommendedValues = []struct {
+	option      string
+	snippet     string                // value emitted verbatim in the generated snippet
+	recommended string                // human description of the accepted values, shown in logs
+	accept      func(got string) bool // reports whether an observed value is compliant
+}{
+	{
+		option:      "ClientAliveInterval",
+		snippet:     "300",
+		recommended: "1-300",
+		// A non-zero timeout of at most 300s; a stricter (smaller) value is fine, 0 disables it.
+		accept: func(got string) bool {
+			n, err := strconv.Atoi(got)
+			return err == nil && n >= 1 && n <= 300
+		},
+	},
+	{
+		option:      "ClientAliveCountMax",
+		snippet:     "0",
+		recommended: "0",
+		accept:      func(got string) bool { return got == "0" },
+	},
+}
+
+// checkRecommendedValue verifies a single-value directive is compliant per its accept predicate.
+// Absent or non-compliant values are warnings (recommended but not required). Checked in local
+// and config-file modes only (not advertised in the KEXINIT handshake).
+func checkRecommendedValue(c config, option, recommended string, accept func(got string) bool, res *result) {
+	slog.Info("verifying", "option", option)
+	vals := c[strings.ToLower(option)]
+	if len(vals) == 0 {
+		slog.Warn("recommended setting not configured", "option", option, "recommended", recommended)
+		res.warnings++
+		return
+	}
+	got := strings.TrimSpace(vals[len(vals)-1]) // last wins for repeated directives
+	if accept(got) {
+		slog.Info("found recommended setting", "option", option, "value", got)
+		return
+	}
+	slog.Warn("value differs from recommended", "option", option, "value", got, "recommended", recommended)
+	res.warnings++
+}
+
 // generateSnippet writes an sshd_config.d snippet that restricts each option to recommended values.
 // In strict mode only recommended values are included; otherwise not-recommended are included too.
 func generateSnippet(path string, strict bool) error {
@@ -504,6 +555,9 @@ func generateSnippet(path string, strict bool) error {
 		fmt.Fprintln(&sb, line)
 	}
 	fmt.Fprintln(&sb, sftpSubsystemDirective)
+	for _, v := range cisRecommendedValues {
+		fmt.Fprintf(&sb, "%s %s\n", v.option, v.snippet)
+	}
 	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil { // #nosec G306 -- config snippet is not a secret
 		slog.Error("cannot write snippet", "path", path, "err", err.Error())
 		return newExitError(generateError, "cannot write snippet to %s: %w", path, err)
@@ -860,6 +914,9 @@ func main() {
 		rulePermitEmptyPasswords.check(c, &res)
 		rulePubkeyAcceptedAlgorithms.check(c, &res)
 		checkSFTPSubsystem(c, &res)
+		for _, v := range cisRecommendedValues {
+			checkRecommendedValue(c, v.option, v.recommended, v.accept, &res)
+		}
 		if p.config != "" {
 			slog.Warn("host key sizes cannot be verified in config-file mode; use local mode (no -config) for size checks")
 		} else {
