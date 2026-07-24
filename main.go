@@ -536,6 +536,12 @@ var cisRecommendedValues = []struct {
 		recommended: "no",
 		accept:      func(got string) bool { return got == "no" },
 	},
+	{
+		option:      "UsePAM",
+		snippet:     "yes",
+		recommended: "yes",
+		accept:      func(got string) bool { return got == "yes" },
+	},
 }
 
 // checkRecommendedValue verifies a single-value directive is compliant per its accept predicate.

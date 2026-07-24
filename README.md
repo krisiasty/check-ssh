@@ -371,6 +371,20 @@ external sftp subsystem is reported as a warning (the run still passes), while i
 
 ---
 
+### UsePAM
+
+Controls whether the server uses Pluggable Authentication Modules for account, session, and authentication management. Checked in **local and config-file modes only**.
+
+Recommended for CIS compliance. This setting is **recommended but not required**: in normal mode an absent or differing value is reported as a warning (the run still passes), while in strict mode
+that warning fails the run (exit 99). The generated snippet always emits `UsePAM yes`.
+
+| Status          | Value        | Reason                                                                                            |
+| --------------- | ------------ | ------------------------------------------------------------------------------------------------- |
+| Recommended     | `yes`        | Enables PAM account/session management, including access controls, logging, and password policy.  |
+| Not recommended | other / `no` | Bypasses PAM, losing centralized account restrictions, session setup, and audit hooks.            |
+
+---
+
 ### Host key sizes
 
 In addition to algorithm classification, **local mode** opens each `HostKey` referenced by `sshd -T` (reading the corresponding `.pub` file beside the private key) and reports the key's bit length.
@@ -394,7 +408,7 @@ present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` h
 Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No
 credentials are required and no authentication takes place.
 
-Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the fifteen supported settings**:
+Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the sixteen supported settings**:
 
 | Checked in remote mode              | Not checked in remote mode    |
 | ----------------------------------- | ----------------------------- |
@@ -409,6 +423,7 @@ Because only the `KEXINIT` packet is inspected, **remote mode can only check fou
 |                                     | `PermitUserEnvironment`       |
 |                                     | `PubkeyAcceptedAlgorithms`    |
 |                                     | `Subsystem` (sftp)            |
+|                                     | `UsePAM`                      |
 
 Additional caveats:
 
