@@ -243,6 +243,17 @@ Message authentication codes used to verify session integrity.
 
 ---
 
+### PermitEmptyPasswords
+
+Controls whether the server allows login to accounts with empty passwords. Checked in **local and config-file modes only**.
+
+| Status      | Value | Reason                                                                                                 |
+| ----------- | ----- | ------------------------------------------------------------------------------------------------------ |
+| Recommended | `no`  | Accounts with empty passwords must never be reachable over the network.                                |
+| Prohibited  | `yes` | Permits password authentication against blank-password accounts, trivially bypassing authentication.   |
+
+---
+
 ### PubkeyAcceptedAlgorithms
 
 Algorithms accepted for public-key client authentication. Checked in **local and config-file modes only**.
@@ -295,14 +306,15 @@ present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` h
 Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No
 credentials are required and no authentication takes place.
 
-Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the eight supported settings**:
+Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the nine supported settings**:
 
 | Checked in remote mode              | Not checked in remote mode    |
 | ----------------------------------- | ----------------------------- |
 | `KexAlgorithms`                     | `CASignatureAlgorithms`       |
 | `HostKeyAlgorithms`                 | `HostbasedAcceptedAlgorithms` |
 | `Ciphers` (server→client direction) | `HostbasedAuthentication`     |
-| `MACs` (server→client direction)    | `PubkeyAcceptedAlgorithms`    |
+| `MACs` (server→client direction)    | `PermitEmptyPasswords`        |
+|                                     | `PubkeyAcceptedAlgorithms`    |
 
 Additional caveats:
 

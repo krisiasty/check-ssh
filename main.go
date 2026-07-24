@@ -240,6 +240,13 @@ var (
 		prohibited: "diffie-hellman-group1-sha1,diffie-hellman-group14-sha1,diffie-hellman-group14-sha256," +
 			"diffie-hellman-group-exchange-sha1",
 	}.build()
+	rulePermitEmptyPasswords = rule{
+		option:         "PermitEmptyPasswords",
+		recommended:    "no",
+		notRecommended: "",
+		prohibited:     "yes",
+		boolean:        true,
+	}.build()
 	ruleMACs = rule{
 		option:         "MACs",
 		recommended:    "hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com",
@@ -268,6 +275,7 @@ var (
 		ruleHostKeyAlgorithms,
 		ruleKexAlgorithms,
 		ruleMACs,
+		rulePermitEmptyPasswords,
 		rulePubkeyAcceptedAlgorithms,
 	}
 )
@@ -815,6 +823,7 @@ func main() {
 		ruleHostKeyAlgorithms.check(c, &res)
 		ruleKexAlgorithms.check(c, &res)
 		ruleMACs.check(c, &res)
+		rulePermitEmptyPasswords.check(c, &res)
 		rulePubkeyAcceptedAlgorithms.check(c, &res)
 		if p.config != "" {
 			slog.Warn("host key sizes cannot be verified in config-file mode; use local mode (no -config) for size checks")
