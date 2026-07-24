@@ -196,6 +196,9 @@ func TestGenerateSnippet(t *testing.T) {
 	if !strings.Contains(string(got), "ClientAliveCountMax 0") {
 		t.Fatalf("snippet missing ClientAliveCountMax directive:\n%s", got)
 	}
+	if !strings.Contains(string(got), "IgnoreRhosts yes") {
+		t.Fatalf("snippet missing IgnoreRhosts directive:\n%s", got)
+	}
 }
 
 func TestGenerateSnippetUnwritable(t *testing.T) {
@@ -824,6 +827,9 @@ func TestCheckRecommendedValue(t *testing.T) {
 		{"interval absent warns", config{}, "ClientAliveInterval", interval, 1},
 		{"countmax 0 is recommended", config{"clientalivecountmax": {"0"}}, "ClientAliveCountMax", exactZero, 0},
 		{"countmax nonzero warns", config{"clientalivecountmax": {"3"}}, "ClientAliveCountMax", exactZero, 1},
+		{"ignorerhosts yes is recommended", config{"ignorerhosts": {"yes"}}, "IgnoreRhosts", func(got string) bool { return got == "yes" }, 0},
+		{"ignorerhosts no warns", config{"ignorerhosts": {"no"}}, "IgnoreRhosts", func(got string) bool { return got == "yes" }, 1},
+		{"ignorerhosts absent warns", config{}, "IgnoreRhosts", func(got string) bool { return got == "yes" }, 1},
 		{"whitespace is trimmed", config{"clientaliveinterval": {"  60  "}}, "ClientAliveInterval", interval, 0},
 		{"last value wins", config{"clientaliveinterval": {"0", "120"}}, "ClientAliveInterval", interval, 0},
 	}

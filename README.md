@@ -224,6 +224,20 @@ Algorithms the server uses to authenticate itself to clients.
 
 ---
 
+### IgnoreRhosts
+
+Controls whether `.rhosts` and `.shosts` files are ignored during host-based authentication. Checked in **local and config-file modes only**.
+
+Recommended for CIS compliance. This setting is **recommended but not required**: in normal mode an absent or differing value is reported as a warning (the run still passes), while in strict mode
+that warning fails the run (exit 99). The generated snippet always emits `IgnoreRhosts yes`.
+
+| Status          | Value       | Reason                                                                                             |
+| --------------- | ----------- | -------------------------------------------------------------------------------------------------- |
+| Recommended     | `yes`       | Ignores user `.rhosts`/`.shosts` files, preventing trust relationships that bypass key-based auth. |
+| Not recommended | other / `no` | Honors `.rhosts`/`.shosts`, allowing users to establish spoofable host-based trust.               |
+
+---
+
 ### KexAlgorithms
 
 Key exchange algorithms used to establish a shared session secret.
@@ -352,7 +366,7 @@ present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` h
 Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No
 credentials are required and no authentication takes place.
 
-Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the twelve supported settings**:
+Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the thirteen supported settings**:
 
 | Checked in remote mode              | Not checked in remote mode    |
 | ----------------------------------- | ----------------------------- |
@@ -361,6 +375,7 @@ Because only the `KEXINIT` packet is inspected, **remote mode can only check fou
 | `Ciphers` (server→client direction) | `ClientAliveCountMax`         |
 | `MACs` (server→client direction)    | `HostbasedAcceptedAlgorithms` |
 |                                     | `HostbasedAuthentication`     |
+|                                     | `IgnoreRhosts`                |
 |                                     | `PermitEmptyPasswords`        |
 |                                     | `PubkeyAcceptedAlgorithms`    |
 |                                     | `Subsystem` (sftp)            |
