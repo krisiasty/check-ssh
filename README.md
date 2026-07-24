@@ -148,10 +148,10 @@ Recommended for CIS compliance. This setting is **recommended but not required**
 that warning fails the run (exit 99). With `ClientAliveCountMax 0` and [ClientAliveInterval](#clientaliveinterval) `300`, the server disconnects an idle client after the first missed probe (300
 seconds). The generated snippet always emits `ClientAliveCountMax 0`.
 
-| Status          | Value   | Reason                                                                                     |
-| --------------- | ------- | ------------------------------------------------------------------------------------------ |
+| Status          | Value   | Reason                                                                                      |
+| --------------- | ------- | ------------------------------------------------------------------------------------------- |
 | Recommended     | `0`     | Disconnects an idle client on the first missed probe; the tightest CIS-recommended timeout. |
-| Not recommended | other   | Larger values extend how long an idle or dropped session lingers before disconnect.        |
+| Not recommended | other   | Larger values extend how long an idle or dropped session lingers before disconnect.         |
 
 ---
 
@@ -231,10 +231,10 @@ Controls whether `.rhosts` and `.shosts` files are ignored during host-based aut
 Recommended for CIS compliance. This setting is **recommended but not required**: in normal mode an absent or differing value is reported as a warning (the run still passes), while in strict mode
 that warning fails the run (exit 99). The generated snippet always emits `IgnoreRhosts yes`.
 
-| Status          | Value       | Reason                                                                                             |
-| --------------- | ----------- | -------------------------------------------------------------------------------------------------- |
-| Recommended     | `yes`       | Ignores user `.rhosts`/`.shosts` files, preventing trust relationships that bypass key-based auth. |
-| Not recommended | other / `no` | Honors `.rhosts`/`.shosts`, allowing users to establish spoofable host-based trust.               |
+| Status          | Value        | Reason                                                                                             |
+| --------------- | ------------ | -------------------------------------------------------------------------------------------------- |
+| Recommended     | `yes`        | Ignores user `.rhosts`/`.shosts` files, preventing trust relationships that bypass key-based auth. |
+| Not recommended | other / `no` | Honors `.rhosts`/`.shosts`, allowing users to establish spoofable host-based trust.                |
 
 ---
 
@@ -306,9 +306,9 @@ Controls whether the root user may log in directly over SSH. Checked in **local 
 Recommended for CIS compliance. This setting is **recommended but not required**: in normal mode an absent or differing value is reported as a warning (the run still passes), while in strict mode
 that warning fails the run (exit 99). The generated snippet always emits `PermitRootLogin no`.
 
-| Status          | Value                              | Reason                                                                                     |
-| --------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| Recommended     | `no`                               | Disables direct root login; administrators log in as a normal user and escalate.           |
+| Status          | Value                               | Reason                                                                                     |
+| --------------- | ----------------------------------- | ------------------------------------------------------------------------------------------ |
+| Recommended     | `no`                                | Disables direct root login; administrators log in as a normal user and escalate.           |
 | Not recommended | other (`yes` / `prohibit-password`) | Any value other than `no` permits some form of direct root login over SSH.                 |
 
 ---
@@ -320,10 +320,10 @@ Controls whether the server processes user `~/.ssh/environment` files and `envir
 Recommended for CIS compliance. This setting is **recommended but not required**: in normal mode an absent or differing value is reported as a warning (the run still passes), while in strict mode
 that warning fails the run (exit 99). The generated snippet always emits `PermitUserEnvironment no`.
 
-| Status          | Value        | Reason                                                                                             |
-| --------------- | ------------ | -------------------------------------------------------------------------------------------------- |
-| Recommended     | `no`         | Prevents users from setting environment variables (e.g. `LD_PRELOAD`) that can bypass restrictions. |
-| Not recommended | other / `yes` | Lets users inject environment variables at login, enabling privilege-escalation vectors.          |
+| Status          | Value         | Reason                                                                                              |
+| --------------- | ------------- | --------------------------------------------------------------------------------------------------- |
+| Recommended     | `no`          | Prevents users from setting environment variables (e.g. `LD_PRELOAD`) that can bypass restrictions. |
+| Not recommended | other / `yes` | Lets users inject environment variables at login, enabling privilege-escalation vectors.            |
 
 ---
 
