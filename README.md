@@ -280,6 +280,21 @@ Key exchange algorithms used to establish a shared session secret.
 
 ---
 
+### LoginGraceTime
+
+Seconds the server waits for a client to authenticate before disconnecting. Checked in **local and config-file modes only**.
+
+Recommended for CIS compliance to limit the window for unauthenticated connections (which also mitigates resource-exhaustion from half-open sessions). This setting is **recommended but not
+required**: in normal mode an absent or non-compliant value is reported as a warning (the run still passes), while in strict mode that warning fails the run (exit 99). Any non-zero grace period of at
+most 60 seconds is accepted — a **stricter (smaller) value passes**; only `0` (no limit) or a value above 60 warns. The generated snippet always emits `LoginGraceTime 60`.
+
+| Status          | Value          | Reason                                                                            |
+| --------------- | -------------- | --------------------------------------------------------------------------------- |
+| Recommended     | `1`–`60`       | Bounds the unauthenticated window to at most 60 seconds; a smaller value is fine. |
+| Not recommended | `0` or `> 60`  | `0` removes the limit entirely; larger values exceed the CIS recommendation.      |
+
+---
+
 ### MACs
 
 Message authentication codes used to verify session integrity.
@@ -449,7 +464,7 @@ meaningful there).
 Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No
 credentials are required and no authentication takes place.
 
-Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the seventeen supported settings**:
+Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the eighteen supported settings**:
 
 | Checked in remote mode              | Not checked in remote mode        |
 | ----------------------------------- | --------------------------------- |
@@ -460,6 +475,7 @@ Because only the `KEXINIT` packet is inspected, **remote mode can only check fou
 |                                     | `HostbasedAcceptedAlgorithms`     |
 |                                     | `HostbasedAuthentication`         |
 |                                     | `IgnoreRhosts`                    |
+|                                     | `LoginGraceTime`                  |
 |                                     | `PermitEmptyPasswords`            |
 |                                     | `PermitRootLogin`                 |
 |                                     | `PermitUserEnvironment`           |

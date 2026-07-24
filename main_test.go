@@ -231,6 +231,9 @@ func TestGenerateSnippet(t *testing.T) {
 	if !strings.Contains(string(got), "AllowGroups sudo") {
 		t.Fatalf("snippet missing AllowGroups directive:\n%s", got)
 	}
+	if !strings.Contains(string(got), "LoginGraceTime 60") {
+		t.Fatalf("snippet missing LoginGraceTime directive:\n%s", got)
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("os.Stat() error = %v", err)
@@ -242,7 +245,7 @@ func TestGenerateSnippet(t *testing.T) {
 
 func TestGenerateSnippetTightensExistingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "snippet.conf")
-	if err := os.WriteFile(path, []byte("stale\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("stale\n"), 0o644); err != nil { // #nosec G306 -- intentionally loose so the test can verify generateSnippet tightens it
 		t.Fatal(err)
 	}
 	if err := generateSnippet(path, false); err != nil {
@@ -868,6 +871,10 @@ func TestCheckRecommendedValue(t *testing.T) {
 		return err == nil && n >= 1 && n <= 300
 	}
 	exactZero := func(got string) bool { return got == "0" }
+	loginGrace := func(got string) bool {
+		n, err := strconv.Atoi(got)
+		return err == nil && n >= 1 && n <= 60
+	}
 	tests := []struct {
 		name     string
 		config   config
@@ -895,6 +902,11 @@ func TestCheckRecommendedValue(t *testing.T) {
 		{"usepam yes is recommended", config{"usepam": {"yes"}}, "UsePAM", func(got string) bool { return got == "yes" }, 0},
 		{"usepam no warns", config{"usepam": {"no"}}, "UsePAM", func(got string) bool { return got == "yes" }, 1},
 		{"usepam absent warns", config{}, "UsePAM", func(got string) bool { return got == "yes" }, 1},
+		{"logingracetime 60 is recommended", config{"logingracetime": {"60"}}, "LoginGraceTime", loginGrace, 0},
+		{"logingracetime stricter is recommended", config{"logingracetime": {"30"}}, "LoginGraceTime", loginGrace, 0},
+		{"logingracetime 0 warns", config{"logingracetime": {"0"}}, "LoginGraceTime", loginGrace, 1},
+		{"logingracetime above 60 warns", config{"logingracetime": {"120"}}, "LoginGraceTime", loginGrace, 1},
+		{"logingracetime absent warns", config{}, "LoginGraceTime", loginGrace, 1},
 		{"whitespace is trimmed", config{"clientaliveinterval": {"  60  "}}, "ClientAliveInterval", interval, 0},
 		{"last value wins", config{"clientaliveinterval": {"0", "120"}}, "ClientAliveInterval", interval, 0},
 	}
@@ -941,7 +953,7 @@ func TestGeneratedSnippetSatisfiesAccessControl(t *testing.T) {
 	if err := generateSnippet(path, false); err != nil {
 		t.Fatalf("generateSnippet() error = %v", err)
 	}
-	buf, err := os.ReadFile(path)
+	buf, err := os.ReadFile(path) // #nosec G304 -- path is a test-controlled temp file
 	if err != nil {
 		t.Fatal(err)
 	}

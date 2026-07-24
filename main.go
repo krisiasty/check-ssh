@@ -557,6 +557,16 @@ var cisRecommendedValues = []struct {
 		recommended: "yes",
 		accept:      func(got string) bool { return got == "yes" },
 	},
+	{
+		option:      "LoginGraceTime",
+		snippet:     "60",
+		recommended: "1-60",
+		// A non-zero grace period of at most 60s; a stricter (smaller) value is fine, 0 disables the limit.
+		accept: func(got string) bool {
+			n, err := strconv.Atoi(got)
+			return err == nil && n >= 1 && n <= 60
+		},
+	},
 }
 
 // checkRecommendedValue verifies a single-value directive is compliant per its accept predicate.

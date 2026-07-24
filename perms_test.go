@@ -50,7 +50,7 @@ func TestEvalModeSecretFile(t *testing.T) {
 func TestFixPermTargetTightensMode(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sshd_config")
-	if err := os.WriteFile(path, []byte("x"), 0o666); err != nil {
+	if err := os.WriteFile(path, []byte("x"), 0o666); err != nil { // #nosec G306 -- intentionally loose so the test can verify fixPermTarget tightens it
 		t.Fatal(err)
 	}
 	tgt := permTarget{path: path, wantMode: 0o600, errorMask: 0o022, warnMask: 0o044}
