@@ -202,6 +202,9 @@ func TestGenerateSnippet(t *testing.T) {
 	if !strings.Contains(string(got), "PermitRootLogin no") {
 		t.Fatalf("snippet missing PermitRootLogin directive:\n%s", got)
 	}
+	if !strings.Contains(string(got), "PermitUserEnvironment no") {
+		t.Fatalf("snippet missing PermitUserEnvironment directive:\n%s", got)
+	}
 }
 
 func TestGenerateSnippetUnwritable(t *testing.T) {
@@ -836,6 +839,9 @@ func TestCheckRecommendedValue(t *testing.T) {
 		{"permitrootlogin no is recommended", config{"permitrootlogin": {"no"}}, "PermitRootLogin", func(got string) bool { return got == "no" }, 0},
 		{"permitrootlogin prohibit-password warns", config{"permitrootlogin": {"prohibit-password"}}, "PermitRootLogin", func(got string) bool { return got == "no" }, 1},
 		{"permitrootlogin absent warns", config{}, "PermitRootLogin", func(got string) bool { return got == "no" }, 1},
+		{"permituserenvironment no is recommended", config{"permituserenvironment": {"no"}}, "PermitUserEnvironment", func(got string) bool { return got == "no" }, 0},
+		{"permituserenvironment yes warns", config{"permituserenvironment": {"yes"}}, "PermitUserEnvironment", func(got string) bool { return got == "no" }, 1},
+		{"permituserenvironment absent warns", config{}, "PermitUserEnvironment", func(got string) bool { return got == "no" }, 1},
 		{"whitespace is trimmed", config{"clientaliveinterval": {"  60  "}}, "ClientAliveInterval", interval, 0},
 		{"last value wins", config{"clientaliveinterval": {"0", "120"}}, "ClientAliveInterval", interval, 0},
 	}

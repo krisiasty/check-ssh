@@ -313,6 +313,20 @@ that warning fails the run (exit 99). The generated snippet always emits `Permit
 
 ---
 
+### PermitUserEnvironment
+
+Controls whether the server processes user `~/.ssh/environment` files and `environment=` options in `authorized_keys`. Checked in **local and config-file modes only**.
+
+Recommended for CIS compliance. This setting is **recommended but not required**: in normal mode an absent or differing value is reported as a warning (the run still passes), while in strict mode
+that warning fails the run (exit 99). The generated snippet always emits `PermitUserEnvironment no`.
+
+| Status          | Value        | Reason                                                                                             |
+| --------------- | ------------ | -------------------------------------------------------------------------------------------------- |
+| Recommended     | `no`         | Prevents users from setting environment variables (e.g. `LD_PRELOAD`) that can bypass restrictions. |
+| Not recommended | other / `yes` | Lets users inject environment variables at login, enabling privilege-escalation vectors.          |
+
+---
+
 ### PubkeyAcceptedAlgorithms
 
 Algorithms accepted for public-key client authentication. Checked in **local and config-file modes only**.
@@ -380,7 +394,7 @@ present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` h
 Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No
 credentials are required and no authentication takes place.
 
-Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the fourteen supported settings**:
+Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the fifteen supported settings**:
 
 | Checked in remote mode              | Not checked in remote mode    |
 | ----------------------------------- | ----------------------------- |
@@ -392,6 +406,7 @@ Because only the `KEXINIT` packet is inspected, **remote mode can only check fou
 |                                     | `IgnoreRhosts`                |
 |                                     | `PermitEmptyPasswords`        |
 |                                     | `PermitRootLogin`             |
+|                                     | `PermitUserEnvironment`       |
 |                                     | `PubkeyAcceptedAlgorithms`    |
 |                                     | `Subsystem` (sftp)            |
 
