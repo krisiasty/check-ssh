@@ -48,6 +48,7 @@ type params struct {
 	generate string // non-empty: generate snippet to this path
 	strict   bool
 	debug    bool
+	fixPerms bool // remediate sshd config/key permissions in place (local mode only)
 	pathSet  bool
 	portSet  bool
 }
@@ -62,6 +63,10 @@ const (
 	maxSSHPacketLen     = 35000
 	rsaMinRecommended   = 3072 // RSA host keys below this are warned
 	rsaMinAcceptable    = 2048 // RSA host keys below this are errored
+
+	// cisConfigFileMode is the CIS-recommended mode for sshd_config and its drop-in files:
+	// readable and writable only by root (0600), no group or world access.
+	cisConfigFileMode = 0o600
 )
 
 // injectGenerateDefault inserts a default filename into os.Args when -generate is
@@ -300,6 +305,7 @@ func getParams() params {
 	flag.IntVar(&c.port, "port", 22, "remote SSH port")
 	flag.StringVar(&c.generate, "generate", "", `generate sshd_config.d snippet to filename (when used without value: "00-ssh-hardened.conf")`)
 	flag.BoolVar(&c.strict, "strict", false, "strict check: fail on warnings")
+	flag.BoolVar(&c.fixPerms, "fix-perms", false, "remediate ownership/mode of sshd config and host key files to CIS recommendations (local mode only)")
 	flag.BoolVar(&showVersion, "version", false, "print program version and quit")
 	flag.BoolVar(&c.debug, "debug", false, "increase logging level")
 	flag.BoolVar(&showHelp, "help", false, "print help and exit")
@@ -340,6 +346,15 @@ func validateParams(c params) error {
 		if c.portSet {
 			return fmt.Errorf("-generate cannot be combined with -port")
 		}
+		if c.fixPerms {
+			return fmt.Errorf("-generate cannot be combined with -fix-perms")
+		}
+	}
+	if c.fixPerms && c.host != "" {
+		return fmt.Errorf("-fix-perms cannot be combined with -host")
+	}
+	if c.fixPerms && c.config != "" {
+		return fmt.Errorf("-fix-perms cannot be combined with -config (permissions can only be fixed on the local host)")
 	}
 	if c.host != "" && c.config != "" {
 		return fmt.Errorf("-host cannot be combined with -config")
@@ -582,11 +597,16 @@ func generateSnippet(path string, strict bool) error {
 	for _, v := range cisRecommendedValues {
 		fmt.Fprintf(&sb, "%s %s\n", v.option, v.snippet)
 	}
-	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil { // #nosec G306 -- config snippet is not a secret
+	if err := os.WriteFile(path, []byte(sb.String()), cisConfigFileMode); err != nil {
 		slog.Error("cannot write snippet", "path", path, "err", err.Error())
 		return newExitError(generateError, "cannot write snippet to %s: %w", path, err)
 	}
-	slog.Info("snippet written", "path", path)
+	// WriteFile does not adjust the mode of a pre-existing file; enforce 0600 explicitly so
+	// regenerating over an older, more permissive snippet still yields CIS-compliant permissions.
+	if err := os.Chmod(path, cisConfigFileMode); err != nil {
+		slog.Warn("snippet written but could not set permissions to 0600", "path", path, "err", err.Error())
+	}
+	slog.Info("snippet written", "path", path, "mode", "0600")
 	if strings.HasPrefix(filepath.Clean(path), "/etc/") {
 		u, err := user.Current()
 		if err == nil && u.Username != "root" {
@@ -942,9 +962,10 @@ func main() {
 			checkRecommendedValue(c, v.option, v.recommended, v.accept, &res)
 		}
 		if p.config != "" {
-			slog.Warn("host key sizes cannot be verified in config-file mode; use local mode (no -config) for size checks")
+			slog.Warn("host key sizes and file permissions cannot be verified in config-file mode; use local mode (no -config) for those checks")
 		} else {
 			checkHostKeySizes(c, &res)
+			checkConfigPermissions(c, p.fixPerms, &res)
 		}
 	}
 

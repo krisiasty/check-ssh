@@ -23,7 +23,8 @@ go install github.com/krisiasty/check-ssh@latest
 The tool operates in four modes:
 
 **Local mode** (default) — runs `sshd -T` on the local machine to obtain the fully-resolved, active configuration, checks all supported options, and inspects each `HostKey` to verify its bit length.
-Requires root because `sshd -T` needs access to host key files.
+It also audits the ownership and mode of the sshd configuration files and host keys against CIS recommendations, and can remediate them in place with `-fix-perms`. Requires root because `sshd -T`
+needs access to host key files.
 
 **Config-file mode** (`-config`) — reads a file containing the output of a previously captured `sshd -T` command and checks all supported options. Useful for offline/CI auditing or auditing a remote
 host when you can copy the file.
@@ -39,7 +40,7 @@ In scan modes, every enabled value is classified as **recommended**, **not recom
 ## Usage
 
 ```text
-check-ssh [-path <sshd>] [-strict] [-debug]
+check-ssh [-path <sshd>] [-strict] [-fix-perms] [-debug]
 check-ssh -config <file> [-strict] [-debug]
 check-ssh -host <host> [-port <port>] [-strict] [-debug]
 check-ssh -generate [<file>] [-strict] [-debug]
@@ -57,6 +58,7 @@ check-ssh -help
 | `-port <port>`       | `22`                   | TCP port for remote scanning.                                                                                               |
 | `-generate [<file>]` | `00-ssh-hardened.conf` | Write an `sshd_config.d` drop-in snippet that removes disallowed algorithms. Must be used standalone.                       |
 | `-strict`            | false                  | Treat _not-recommended_ findings as failures (exit 99). Also removes not-recommended algorithms from the generated snippet. |
+| `-fix-perms`         | false                  | Remediate ownership/mode of sshd config and host key files to CIS recommendations (local mode only; cannot combine with `-config`/`-host`/`-generate`). |
 | `-debug`             | false                  | Increase log verbosity.                                                                                                     |
 | `-version`           | —                      | Print version, commit, and build date, then exit.                                                                           |
 | `-help`              | —                      | Print usage and exit.                                                                                                       |
@@ -403,6 +405,30 @@ present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` h
 
 ---
 
+### File permissions
+
+In **local mode**, `check-ssh` audits the ownership and mode of the sshd configuration and host keys against CIS recommendations. The `Include` directive is not followed, so only the conventional
+locations below are covered:
+
+| Path                              | Recommended    | Too permissive → error                  | Not recommended → warning     |
+| --------------------------------- | -------------- | --------------------------------------- | ----------------------------- |
+| `/etc/ssh/sshd_config`            | `0600` root:root | group/other **write**, non-root owner | group/other **read**          |
+| `/etc/ssh/sshd_config.d/`         | `0755` root:root | group/other **write**, non-root owner | —                             |
+| `/etc/ssh/sshd_config.d/*.conf`   | `0600` root:root | group/other **write**, non-root owner | group/other **read**          |
+| Private host keys (`HostKey`)     | `0600` root:root | any group/other access, non-root owner | —                             |
+| Public host keys (`HostKey`.pub)  | `0644` root:root | group/other **write**, non-root owner | —                             |
+
+A non-root **group** (with no group permission bits set) is reported as a warning; a non-root **owner** or any group/other permission that grants access beyond the recommendation is an error
+(exit 99). A stricter-than-recommended mode (e.g. `0400` on a config file) is accepted.
+
+**Remediation.** Running with `-fix-perms` repairs each finding in place before re-evaluating: it sets ownership to `root:root` and clears the offending permission bits with `chmod` (only ever
+removing bits, so a stricter mode is preserved). `-fix-perms` requires root, works in local mode only, and cannot be combined with `-config`, `-host`, or `-generate`.
+
+Permission checks run only in **local mode** on **unix**; config-file mode (`-config`) and remote mode (`-host`) skip them, and on non-unix platforms they are a no-op (POSIX ownership/mode are not
+meaningful there).
+
+---
+
 ## Limitations of remote mode
 
 Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No
@@ -432,6 +458,7 @@ Additional caveats:
 - **Algorithm advertisement ≠ configuration.** A server may advertise algorithms that are filtered by PAM, certificates, or other post-handshake policy.
 - **No snippet generation in remote mode.** `-generate` is a standalone mode and cannot be combined with any scan mode.
 - **No host key size verification.** Sizes are checked only in local mode (see [Host key sizes](#host-key-sizes)).
+- **No file permission auditing.** Ownership and mode are checked only in local mode (see [File permissions](#file-permissions)).
 - **Network access required.** The target port (default 22) must be reachable.
 
 For a complete audit use local mode (`sudo check-ssh`) or capture `sshd -T` output on the target and transfer it for offline analysis (`check-ssh -config <file>`).
@@ -440,8 +467,9 @@ For a complete audit use local mode (`sudo check-ssh`) or capture `sshd -T` outp
 
 ## Generating and installing a configuration snippet
 
-`check-ssh -generate` produces a drop-in `sshd_config.d` file that removes all disallowed algorithms from sshd's defaults using the `-algorithm` subtraction syntax. It is a standalone mode and cannot
-be combined with local, config-file, or remote scanning. Adding `-strict` also removes not-recommended algorithms.
+`check-ssh -generate` produces a drop-in `sshd_config.d` file that removes all disallowed algorithms from sshd's defaults using the `-algorithm` subtraction syntax and pins the CIS-recommended
+directives. It is a standalone mode and cannot be combined with local, config-file, or remote scanning. Adding `-strict` also removes not-recommended algorithms. The file is written with mode `0600`
+(owner read/write only, per CIS Benchmark 5.2.1); regenerating over an existing file also tightens its mode to `0600`.
 
 ### Generate
 
@@ -467,10 +495,10 @@ sudo check-ssh -generate /etc/ssh/sshd_config.d/00-ssh-hardened.conf -strict
 2. **Place the file in the drop-in directory with correct ownership and mode:**
 
    ```bash
-   sudo install -o root -g root -m 644 00-ssh-hardened.conf /etc/ssh/sshd_config.d/
+   sudo install -o root -g root -m 600 00-ssh-hardened.conf /etc/ssh/sshd_config.d/
    ```
 
-   > sshd silently ignores drop-in files not owned by root.
+   > sshd silently ignores drop-in files not owned by root. Mode `0600` (root-only read/write) matches CIS Benchmark 5.2.1 for sshd configuration files.
 
 3. **Validate the resulting configuration:**
 

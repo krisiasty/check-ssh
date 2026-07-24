@@ -65,6 +65,26 @@ func TestValidateParamsRejectsInvalidModes(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "fix-perms and host",
+			params:  params{fixPerms: true, host: "example.com", port: 22},
+			wantErr: true,
+		},
+		{
+			name:    "fix-perms and config",
+			params:  params{fixPerms: true, config: "sshd-T.txt"},
+			wantErr: true,
+		},
+		{
+			name:    "fix-perms and generate",
+			params:  params{fixPerms: true, generate: "00-ssh-hardened.conf"},
+			wantErr: true,
+		},
+		{
+			name:    "fix-perms only",
+			params:  params{fixPerms: true},
+			wantErr: false,
+		},
+		{
 			name:    "host only",
 			params:  params{host: "example.com", port: 22},
 			wantErr: false,
@@ -207,6 +227,30 @@ func TestGenerateSnippet(t *testing.T) {
 	}
 	if !strings.Contains(string(got), "UsePAM yes") {
 		t.Fatalf("snippet missing UsePAM directive:\n%s", got)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("os.Stat() error = %v", err)
+	}
+	if got := info.Mode().Perm(); got != cisConfigFileMode {
+		t.Errorf("snippet mode = %o, want %o", got, cisConfigFileMode)
+	}
+}
+
+func TestGenerateSnippetTightensExistingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "snippet.conf")
+	if err := os.WriteFile(path, []byte("stale\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := generateSnippet(path, false); err != nil {
+		t.Fatalf("generateSnippet() error = %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("os.Stat() error = %v", err)
+	}
+	if got := info.Mode().Perm(); got != cisConfigFileMode {
+		t.Errorf("snippet mode = %o, want %o (regenerating should tighten permissions)", got, cisConfigFileMode)
 	}
 }
 
