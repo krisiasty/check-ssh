@@ -234,6 +234,9 @@ func TestGenerateSnippet(t *testing.T) {
 	if !strings.Contains(string(got), "LoginGraceTime 60") {
 		t.Fatalf("snippet missing LoginGraceTime directive:\n%s", got)
 	}
+	if !strings.Contains(string(got), "LogLevel VERBOSE") {
+		t.Fatalf("snippet missing LogLevel directive:\n%s", got)
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("os.Stat() error = %v", err)
@@ -939,6 +942,34 @@ func TestCheckAccessControl(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var res result
 			checkAccessControl(tt.config, &res)
+			if res.warnings != tt.warnings || res.errors != 0 {
+				t.Errorf("got errors=%d warnings=%d, want errors=0 warnings=%d", res.errors, res.warnings, tt.warnings)
+			}
+		})
+	}
+}
+
+func TestCheckLogLevel(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   config
+		strict   bool
+		warnings int
+	}{
+		{"VERBOSE normal ok", config{"loglevel": {"VERBOSE"}}, false, 0},
+		{"VERBOSE strict ok", config{"loglevel": {"VERBOSE"}}, true, 0},
+		{"INFO normal acceptable", config{"loglevel": {"INFO"}}, false, 0},
+		{"INFO strict warns", config{"loglevel": {"INFO"}}, true, 1},
+		{"lowercase verbose ok", config{"loglevel": {"verbose"}}, true, 0},
+		{"DEBUG normal warns", config{"loglevel": {"DEBUG"}}, false, 1},
+		{"DEBUG strict warns", config{"loglevel": {"DEBUG"}}, true, 1},
+		{"QUIET normal warns", config{"loglevel": {"QUIET"}}, false, 1},
+		{"absent normal warns", config{}, false, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var res result
+			checkLogLevel(tt.config, tt.strict, &res)
 			if res.warnings != tt.warnings || res.errors != 0 {
 				t.Errorf("got errors=%d warnings=%d, want errors=0 warnings=%d", res.errors, res.warnings, tt.warnings)
 			}

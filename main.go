@@ -615,6 +615,39 @@ func checkAccessControl(c config, res *result) {
 	res.warnings++
 }
 
+// logLevelDirective is the LogLevel setting emitted by the generated snippet. VERBOSE logs the key
+// fingerprint used for each successful authentication, which CIS-compliant auditing depends on, and
+// satisfies checkLogLevel in both normal and strict mode.
+const logLevelDirective = "LogLevel VERBOSE"
+
+// checkLogLevel verifies the sshd LogLevel. VERBOSE is recommended (it records the key fingerprint
+// for each login). INFO (sshd's default) is acceptable in normal mode but not in strict mode, which
+// requires VERBOSE; any other level is not recommended. Non-compliant values are recorded as a
+// warning, which passes in normal mode and fails in strict mode via the run's overall strict
+// handling. Checked in local and config-file modes only (not advertised in the KEXINIT handshake).
+func checkLogLevel(c config, strict bool, res *result) {
+	slog.Info("verifying", "option", "LogLevel")
+	vals := c["loglevel"]
+	level := ""
+	if len(vals) > 0 {
+		level = strings.ToUpper(strings.TrimSpace(vals[len(vals)-1]))
+	}
+	switch level {
+	case "VERBOSE":
+		slog.Info("found recommended setting", "option", "LogLevel", "value", "VERBOSE")
+	case "INFO":
+		if strict {
+			slog.Warn("LogLevel INFO is acceptable only in non-strict mode; strict requires VERBOSE", "option", "LogLevel", "value", "INFO")
+			res.warnings++
+		} else {
+			slog.Info("found acceptable setting", "option", "LogLevel", "value", "INFO", "recommended", "VERBOSE")
+		}
+	default:
+		slog.Warn("LogLevel is not recommended; use VERBOSE (INFO is acceptable in non-strict mode)", "option", "LogLevel", "value", level)
+		res.warnings++
+	}
+}
+
 // generateSnippet writes an sshd_config.d snippet that restricts each option to recommended values.
 // In strict mode only recommended values are included; otherwise not-recommended are included too.
 func generateSnippet(path string, strict bool) error {
@@ -634,6 +667,7 @@ func generateSnippet(path string, strict bool) error {
 		fmt.Fprintf(&sb, "%s %s\n", v.option, v.snippet)
 	}
 	fmt.Fprintln(&sb, accessControlSnippet)
+	fmt.Fprintln(&sb, logLevelDirective)
 	if err := os.WriteFile(path, []byte(sb.String()), cisConfigFileMode); err != nil {
 		slog.Error("cannot write snippet", "path", path, "err", err.Error())
 		return newExitError(generateError, "cannot write snippet to %s: %w", path, err)
@@ -999,6 +1033,7 @@ func main() {
 			checkRecommendedValue(c, v.option, v.recommended, v.accept, &res)
 		}
 		checkAccessControl(c, &res)
+		checkLogLevel(c, p.strict, &res)
 		if p.config != "" {
 			slog.Warn("host key sizes and file permissions cannot be verified in config-file mode; use local mode (no -config) for those checks")
 		} else {

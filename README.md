@@ -295,6 +295,22 @@ most 60 seconds is accepted — a **stricter (smaller) value passes**; only `0` 
 
 ---
 
+### LogLevel
+
+Verbosity of sshd's authentication logging. Checked in **local and config-file modes only**.
+
+CIS recommends `VERBOSE`, which additionally logs the key fingerprint used for each successful login — essential for auditing which key authenticated. `INFO` (sshd's default) is **acceptable in normal
+mode but not in strict mode**, where `VERBOSE` is required. Any other level is not recommended. A non-compliant value is reported as a warning (passes normal mode, fails strict mode — exit 99); in
+normal mode `INFO` is treated as acceptable and produces no finding. The generated snippet always emits `LogLevel VERBOSE`.
+
+| Status          | Value                        | Reason                                                                                                 |
+| --------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Recommended     | `VERBOSE`                    | Logs the key fingerprint for each login; required for CIS-compliant auditing. Accepted in strict mode. |
+| Acceptable      | `INFO`                       | sshd's default; accepted in normal mode, but strict mode requires `VERBOSE`.                           |
+| Not recommended | other (`QUIET`, `DEBUG*`, …) | Too little detail for auditing (`QUIET`/`ERROR`/`FATAL`) or logs sensitive data (`DEBUG*`).            |
+
+---
+
 ### MACs
 
 Message authentication codes used to verify session integrity.
@@ -464,7 +480,7 @@ meaningful there).
 Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No
 credentials are required and no authentication takes place.
 
-Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the eighteen supported settings**:
+Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the nineteen supported settings**:
 
 | Checked in remote mode              | Not checked in remote mode        |
 | ----------------------------------- | --------------------------------- |
@@ -476,6 +492,7 @@ Because only the `KEXINIT` packet is inspected, **remote mode can only check fou
 |                                     | `HostbasedAuthentication`         |
 |                                     | `IgnoreRhosts`                    |
 |                                     | `LoginGraceTime`                  |
+|                                     | `LogLevel`                        |
 |                                     | `PermitEmptyPasswords`            |
 |                                     | `PermitRootLogin`                 |
 |                                     | `PermitUserEnvironment`           |
