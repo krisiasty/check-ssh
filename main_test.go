@@ -186,6 +186,9 @@ func TestGenerateSnippet(t *testing.T) {
 	if !strings.Contains(string(got), "HostbasedAuthentication no") {
 		t.Fatalf("snippet missing HostbasedAuthentication directive:\n%s", got)
 	}
+	if !strings.Contains(string(got), "Subsystem sftp internal-sftp") {
+		t.Fatalf("snippet missing Subsystem directive:\n%s", got)
+	}
 }
 
 func TestGenerateSnippetUnwritable(t *testing.T) {
@@ -767,4 +770,28 @@ func TestCheckHostKeySizes(t *testing.T) {
 			t.Errorf("got errors=%d warnings=%d, want 0/1", res.errors, res.warnings)
 		}
 	})
+}
+
+func TestCheckSFTPSubsystem(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   config
+		warnings int
+	}{
+		{"internal-sftp is recommended", config{"subsystem": {"sftp internal-sftp"}}, 0},
+		{"internal-sftp with args is recommended", config{"subsystem": {"sftp internal-sftp -f AUTH -l INFO"}}, 0},
+		{"external sftp-server warns", config{"subsystem": {"sftp /usr/lib/openssh/sftp-server"}}, 1},
+		{"absent sftp subsystem warns", config{}, 1},
+		{"other subsystem without sftp warns", config{"subsystem": {"foo /usr/bin/foo"}}, 1},
+		{"case-insensitive subsystem name", config{"subsystem": {"SFTP internal-sftp"}}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var res result
+			checkSFTPSubsystem(tt.config, &res)
+			if res.warnings != tt.warnings || res.errors != 0 {
+				t.Errorf("got errors=%d warnings=%d, want errors=0 warnings=%d", res.errors, res.warnings, tt.warnings)
+			}
+		})
+	}
 }

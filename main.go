@@ -456,6 +456,39 @@ func verify(r rule, enabled string, res *result) {
 	}
 }
 
+// sftpSubsystemDirective is the recommended sftp subsystem configuration, emitted
+// verbatim in the generated snippet. internal-sftp is an in-process server so it needs
+// no external binary and makes ChrootDirectory-based SFTP sandboxing reliable.
+const sftpSubsystemDirective = "Subsystem sftp internal-sftp"
+
+// checkSFTPSubsystem verifies the sftp subsystem uses the in-process internal-sftp server
+// rather than an external sftp-server binary. Using internal-sftp is recommended but not
+// required: an absent or external sftp subsystem is reported as a warning, which passes in
+// normal mode and fails in strict mode via the run's overall strict handling. Checked in
+// local and config-file modes only (not advertised in the KEXINIT handshake).
+func checkSFTPSubsystem(c config, res *result) {
+	slog.Info("verifying", "option", "Subsystem")
+	var sftp string
+	found := false
+	for _, v := range c["subsystem"] {
+		name, cmd, _ := strings.Cut(strings.TrimSpace(v), " ")
+		if strings.EqualFold(name, "sftp") {
+			sftp, found = strings.TrimSpace(cmd), true
+		}
+	}
+	if !found {
+		slog.Warn("sftp subsystem not configured; 'Subsystem sftp internal-sftp' is recommended", "option", "Subsystem")
+		res.warnings++
+		return
+	}
+	if server, _, _ := strings.Cut(sftp, " "); server == "internal-sftp" {
+		slog.Info("found recommended setting", "option", "Subsystem", "value", "sftp "+sftp)
+		return
+	}
+	slog.Warn("sftp subsystem does not use internal-sftp", "option", "Subsystem", "value", "sftp "+sftp)
+	res.warnings++
+}
+
 // generateSnippet writes an sshd_config.d snippet that restricts each option to recommended values.
 // In strict mode only recommended values are included; otherwise not-recommended are included too.
 func generateSnippet(path string, strict bool) error {
@@ -470,6 +503,7 @@ func generateSnippet(path string, strict bool) error {
 		}
 		fmt.Fprintln(&sb, line)
 	}
+	fmt.Fprintln(&sb, sftpSubsystemDirective)
 	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil { // #nosec G306 -- config snippet is not a secret
 		slog.Error("cannot write snippet", "path", path, "err", err.Error())
 		return newExitError(generateError, "cannot write snippet to %s: %w", path, err)
@@ -825,6 +859,7 @@ func main() {
 		ruleMACs.check(c, &res)
 		rulePermitEmptyPasswords.check(c, &res)
 		rulePubkeyAcceptedAlgorithms.check(c, &res)
+		checkSFTPSubsystem(c, &res)
 		if p.config != "" {
 			slog.Warn("host key sizes cannot be verified in config-file mode; use local mode (no -config) for size checks")
 		} else {

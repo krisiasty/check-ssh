@@ -283,6 +283,21 @@ Algorithms accepted for public-key client authentication. Checked in **local and
 
 ---
 
+### Subsystem (sftp)
+
+Selects the in-process `internal-sftp` server instead of spawning an external `sftp-server` binary. Checked in **local and config-file modes only**.
+
+`internal-sftp` removes reliance on an external binary and makes `ChrootDirectory`-based SFTP sandboxing work reliably. This setting is **recommended but not required**: in normal mode an absent or
+external sftp subsystem is reported as a warning (the run still passes), while in strict mode that warning fails the run (exit 99). The generated snippet always emits `Subsystem sftp internal-sftp`.
+
+| Status          | Value                       | Reason                                                                            |
+| --------------- | --------------------------- | --------------------------------------------------------------------------------- |
+| Recommended     | `internal-sftp`             | In-process SFTP server; no external dependency and reliable chroot sandboxing.    |
+| Not recommended | external `sftp-server` path | Functional, but adds an external dependency and complicates chroot sandboxing.    |
+| Not recommended | (absent)                    | No sftp subsystem configured; `internal-sftp` is preferred when SFTP is offered.  |
+
+---
+
 ### Host key sizes
 
 In addition to algorithm classification, **local mode** opens each `HostKey` referenced by `sshd -T` (reading the corresponding `.pub` file beside the private key) and reports the key's bit length.
@@ -306,7 +321,7 @@ present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` h
 Remote mode (`-host`) connects to the target over TCP, reads the SSH version banner, sends a minimal SSH identification string, and parses the server's unencrypted `KEXINIT` handshake message. No
 credentials are required and no authentication takes place.
 
-Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the nine supported settings**:
+Because only the `KEXINIT` packet is inspected, **remote mode can only check four of the ten supported settings**:
 
 | Checked in remote mode              | Not checked in remote mode    |
 | ----------------------------------- | ----------------------------- |
@@ -315,6 +330,7 @@ Because only the `KEXINIT` packet is inspected, **remote mode can only check fou
 | `Ciphers` (server→client direction) | `HostbasedAuthentication`     |
 | `MACs` (server→client direction)    | `PermitEmptyPasswords`        |
 |                                     | `PubkeyAcceptedAlgorithms`    |
+|                                     | `Subsystem` (sftp)            |
 
 Additional caveats:
 
