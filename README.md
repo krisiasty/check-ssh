@@ -50,18 +50,18 @@ check-ssh -help
 
 ### Arguments
 
-| Flag                 | Default                | Description                                                                                                                 |
-| -------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `-path <path>`       | `/usr/sbin/sshd`       | Path to the `sshd` binary (local mode only).                                                                                |
-| `-config <file>`     | —                      | Path to a saved `sshd -T` output; skips running sshd locally.                                                               |
-| `-host <host>`       | —                      | Hostname or IP of a remote SSH server to scan.                                                                              |
-| `-port <port>`       | `22`                   | TCP port for remote scanning.                                                                                               |
-| `-generate [<file>]` | `00-ssh-hardened.conf` | Write an `sshd_config.d` drop-in snippet that removes disallowed algorithms. Must be used standalone.                       |
-| `-strict`            | false                  | Treat _not-recommended_ findings as failures (exit 99). Also removes not-recommended algorithms from the generated snippet. |
+| Flag                 | Default                | Description                                                                                                                                             |
+| -------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-path <path>`       | `/usr/sbin/sshd`       | Path to the `sshd` binary (local mode only).                                                                                                            |
+| `-config <file>`     | —                      | Path to a saved `sshd -T` output; skips running sshd locally.                                                                                           |
+| `-host <host>`       | —                      | Hostname or IP of a remote SSH server to scan.                                                                                                          |
+| `-port <port>`       | `22`                   | TCP port for remote scanning.                                                                                                                           |
+| `-generate [<file>]` | `00-ssh-hardened.conf` | Write an `sshd_config.d` drop-in snippet that removes disallowed algorithms. Must be used standalone.                                                   |
+| `-strict`            | false                  | Treat _not-recommended_ findings as failures (exit 99). Also removes not-recommended algorithms from the generated snippet.                             |
 | `-fix-perms`         | false                  | Remediate ownership/mode of sshd config and host key files to CIS recommendations (local mode only; cannot combine with `-config`/`-host`/`-generate`). |
-| `-debug`             | false                  | Increase log verbosity.                                                                                                     |
-| `-version`           | —                      | Print version, commit, and build date, then exit.                                                                           |
-| `-help`              | —                      | Print usage and exit.                                                                                                       |
+| `-debug`             | false                  | Increase log verbosity.                                                                                                                                 |
+| `-version`           | —                      | Print version, commit, and build date, then exit.                                                                                                       |
+| `-help`              | —                      | Print usage and exit.                                                                                                                                   |
 
 ### Exit codes
 
@@ -91,10 +91,10 @@ By default sshd permits any account to authenticate, so CIS recommends configuri
 configured it reports a warning (the run still passes), while in strict mode that warning fails the run (exit 99). Configuring any one of them satisfies the check. The generated snippet emits
 `AllowGroups sudo` to satisfy it — **tailor this to your environment** (replace `sudo` with the group that should have SSH access).
 
-| Status          | Value                                                        | Reason                                                                          |
-| --------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| Recommended     | at least one of `AllowUsers`/`AllowGroups`/`DenyUsers`/`DenyGroups` | Explicitly bounds who may log in, rather than permitting every account. |
-| Not recommended | none configured                                              | sshd allows any account to authenticate; access is not restricted by policy.    |
+| Status          | Value                                                               | Reason                                                                       |
+| --------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Recommended     | at least one of `AllowUsers`/`AllowGroups`/`DenyUsers`/`DenyGroups` | Explicitly bounds who may log in, rather than permitting every account.      |
+| Not recommended | none configured                                                     | sshd allows any account to authenticate; access is not restricted by policy. |
 
 ---
 
@@ -150,10 +150,10 @@ passes), while in strict mode that warning fails the run (exit 99). Any non-zero
 or a value above 300 warns. Works together with [ClientAliveCountMax](#clientalivecountmax) — `ClientAliveInterval 300` with `ClientAliveCountMax 0` disconnects an idle client after 300 seconds.
 The generated snippet always emits `ClientAliveInterval 300`.
 
-| Status          | Value            | Reason                                                                            |
-| --------------- | ---------------- | --------------------------------------------------------------------------------- |
-| Recommended     | `1`–`300`        | Non-zero idle timeout of at most 300 seconds; a stricter (smaller) value is fine. |
-| Not recommended | `0` or `> 300`   | `0` disables idle timeouts entirely; larger values exceed the CIS recommendation. |
+| Status          | Value          | Reason                                                                            |
+| --------------- | -------------- | --------------------------------------------------------------------------------- |
+| Recommended     | `1`–`300`      | Non-zero idle timeout of at most 300 seconds; a stricter (smaller) value is fine. |
+| Not recommended | `0` or `> 300` | `0` disables idle timeouts entirely; larger values exceed the CIS recommendation. |
 
 ---
 
@@ -165,10 +165,10 @@ Recommended for CIS compliance. This setting is **recommended but not required**
 that warning fails the run (exit 99). With `ClientAliveCountMax 0` and [ClientAliveInterval](#clientaliveinterval) `300`, the server disconnects an idle client after the first missed probe (300
 seconds). The generated snippet always emits `ClientAliveCountMax 0`.
 
-| Status          | Value   | Reason                                                                                      |
-| --------------- | ------- | ------------------------------------------------------------------------------------------- |
-| Recommended     | `0`     | Disconnects an idle client on the first missed probe; the tightest CIS-recommended timeout. |
-| Not recommended | other   | Larger values extend how long an idle or dropped session lingers before disconnect.         |
+| Status          | Value | Reason                                                                                      |
+| --------------- | ----- | ------------------------------------------------------------------------------------------- |
+| Recommended     | `0`   | Disconnects an idle client on the first missed probe; the tightest CIS-recommended timeout. |
+| Not recommended | other | Larger values extend how long an idle or dropped session lingers before disconnect.         |
 
 ---
 
@@ -288,10 +288,10 @@ Recommended for CIS compliance to limit the window for unauthenticated connectio
 required**: in normal mode an absent or non-compliant value is reported as a warning (the run still passes), while in strict mode that warning fails the run (exit 99). Any non-zero grace period of at
 most 60 seconds is accepted — a **stricter (smaller) value passes**; only `0` (no limit) or a value above 60 warns. The generated snippet always emits `LoginGraceTime 60`.
 
-| Status          | Value          | Reason                                                                            |
-| --------------- | -------------- | --------------------------------------------------------------------------------- |
-| Recommended     | `1`–`60`       | Bounds the unauthenticated window to at most 60 seconds; a smaller value is fine. |
-| Not recommended | `0` or `> 60`  | `0` removes the limit entirely; larger values exceed the CIS recommendation.      |
+| Status          | Value         | Reason                                                                            |
+| --------------- | ------------- | --------------------------------------------------------------------------------- |
+| Recommended     | `1`–`60`      | Bounds the unauthenticated window to at most 60 seconds; a smaller value is fine. |
+| Not recommended | `0` or `> 60` | `0` removes the limit entirely; larger values exceed the CIS recommendation.      |
 
 ---
 
@@ -324,10 +324,10 @@ Message authentication codes used to verify session integrity.
 
 Controls whether the server allows login to accounts with empty passwords. Checked in **local and config-file modes only**.
 
-| Status      | Value | Reason                                                                                                 |
-| ----------- | ----- | ------------------------------------------------------------------------------------------------------ |
-| Recommended | `no`  | Accounts with empty passwords must never be reachable over the network.                                |
-| Prohibited  | `yes` | Permits password authentication against blank-password accounts, trivially bypassing authentication.   |
+| Status      | Value | Reason                                                                                               |
+| ----------- | ----- | ---------------------------------------------------------------------------------------------------- |
+| Recommended | `no`  | Accounts with empty passwords must never be reachable over the network.                              |
+| Prohibited  | `yes` | Permits password authentication against blank-password accounts, trivially bypassing authentication. |
 
 ---
 
@@ -338,10 +338,10 @@ Controls whether the root user may log in directly over SSH. Checked in **local 
 Recommended for CIS compliance. This setting is **recommended but not required**: in normal mode an absent or differing value is reported as a warning (the run still passes), while in strict mode
 that warning fails the run (exit 99). The generated snippet always emits `PermitRootLogin no`.
 
-| Status          | Value                               | Reason                                                                                     |
-| --------------- | ----------------------------------- | ------------------------------------------------------------------------------------------ |
-| Recommended     | `no`                                | Disables direct root login; administrators log in as a normal user and escalate.           |
-| Not recommended | other (`yes` / `prohibit-password`) | Any value other than `no` permits some form of direct root login over SSH.                 |
+| Status          | Value                               | Reason                                                                           |
+| --------------- | ----------------------------------- | -------------------------------------------------------------------------------- |
+| Recommended     | `no`                                | Disables direct root login; administrators log in as a normal user and escalate. |
+| Not recommended | other (`yes` / `prohibit-password`) | Any value other than `no` permits some form of direct root login over SSH.       |
 
 ---
 
@@ -395,11 +395,11 @@ Selects the in-process `internal-sftp` server instead of spawning an external `s
 `internal-sftp` removes reliance on an external binary and makes `ChrootDirectory`-based SFTP sandboxing work reliably. This setting is **recommended but not required**: in normal mode an absent or
 external sftp subsystem is reported as a warning (the run still passes), while in strict mode that warning fails the run (exit 99). The generated snippet always emits `Subsystem sftp internal-sftp`.
 
-| Status          | Value                       | Reason                                                                            |
-| --------------- | --------------------------- | --------------------------------------------------------------------------------- |
-| Recommended     | `internal-sftp`             | In-process SFTP server; no external dependency and reliable chroot sandboxing.    |
-| Not recommended | external `sftp-server` path | Functional, but adds an external dependency and complicates chroot sandboxing.    |
-| Not recommended | (absent)                    | No sftp subsystem configured; `internal-sftp` is preferred when SFTP is offered.  |
+| Status          | Value                       | Reason                                                                           |
+| --------------- | --------------------------- | -------------------------------------------------------------------------------- |
+| Recommended     | `internal-sftp`             | In-process SFTP server; no external dependency and reliable chroot sandboxing.   |
+| Not recommended | external `sftp-server` path | Functional, but adds an external dependency and complicates chroot sandboxing.   |
+| Not recommended | (absent)                    | No sftp subsystem configured; `internal-sftp` is preferred when SFTP is offered. |
 
 ---
 
@@ -410,10 +410,10 @@ Controls whether the server uses Pluggable Authentication Modules for account, s
 Recommended for CIS compliance. This setting is **recommended but not required**: in normal mode an absent or differing value is reported as a warning (the run still passes), while in strict mode
 that warning fails the run (exit 99). The generated snippet always emits `UsePAM yes`.
 
-| Status          | Value        | Reason                                                                                            |
-| --------------- | ------------ | ------------------------------------------------------------------------------------------------- |
-| Recommended     | `yes`        | Enables PAM account/session management, including access controls, logging, and password policy.  |
-| Not recommended | other / `no` | Bypasses PAM, losing centralized account restrictions, session setup, and audit hooks.            |
+| Status          | Value        | Reason                                                                                           |
+| --------------- | ------------ | ------------------------------------------------------------------------------------------------ |
+| Recommended     | `yes`        | Enables PAM account/session management, including access controls, logging, and password policy. |
+| Not recommended | other / `no` | Bypasses PAM, losing centralized account restrictions, session setup, and audit hooks.           |
 
 ---
 
@@ -440,13 +440,13 @@ present in `sshd -T` output and are not exchanged in the unencrypted `KEXINIT` h
 In **local mode**, `check-ssh` audits the ownership and mode of the sshd configuration and host keys against CIS recommendations. The `Include` directive is not followed, so only the conventional
 locations below are covered:
 
-| Path                              | Recommended    | Too permissive → error                  | Not recommended → warning     |
-| --------------------------------- | -------------- | --------------------------------------- | ----------------------------- |
-| `/etc/ssh/sshd_config`            | `0600` root:root | group/other **write**, non-root owner | group/other **read**          |
-| `/etc/ssh/sshd_config.d/`         | `0755` root:root | group/other **write**, non-root owner | —                             |
-| `/etc/ssh/sshd_config.d/*.conf`   | `0600` root:root | group/other **write**, non-root owner | group/other **read**          |
-| Private host keys (`HostKey`)     | `0600` root:root | any group/other access, non-root owner | —                             |
-| Public host keys (`HostKey`.pub)  | `0644` root:root | group/other **write**, non-root owner | —                             |
+| Path                             | Recommended      | Too permissive → error                 | Not recommended → warning |
+| -------------------------------- | ---------------- | -------------------------------------- | ------------------------- |
+| `/etc/ssh/sshd_config`           | `0600` root:root | group/other **write**, non-root owner  | group/other **read**      |
+| `/etc/ssh/sshd_config.d/`        | `0755` root:root | group/other **write**, non-root owner  | —                         |
+| `/etc/ssh/sshd_config.d/*.conf`  | `0600` root:root | group/other **write**, non-root owner  | group/other **read**      |
+| Private host keys (`HostKey`)    | `0600` root:root | any group/other access, non-root owner | —                         |
+| Public host keys (`HostKey`.pub) | `0644` root:root | group/other **write**, non-root owner  | —                         |
 
 A non-root **group** (with no group permission bits set) is reported as a warning; a non-root **owner** or any group/other permission that grants access beyond the recommendation is an error
 (exit 99). A stricter-than-recommended mode (e.g. `0400` on a config file) is accepted.
