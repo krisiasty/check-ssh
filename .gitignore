@@ -2,3 +2,6 @@
 .claude/
 dist/
 check-ssh
+
+# graphify knowledge graph output
+graphify-out/
