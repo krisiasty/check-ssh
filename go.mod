@@ -3,7 +3,7 @@ module github.com/krisiasty/check-ssh
 go 1.26.6
 
 require (
-	github.com/lmittmann/tint v1.2.0
+	github.com/lmittmann/tint v1.2.1
 	github.com/mattn/go-isatty v0.0.24
 )
 
